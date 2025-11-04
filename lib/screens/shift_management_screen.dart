@@ -5,7 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import '../theme/app_theme.dart';
 import '../models/shift_data.dart';
 import '../providers/shift_provider.dart';
-import 'shift_edit_screen.dart';
+import '../providers/navigation_provider.dart';
 
 class ShiftManagementScreen extends HookConsumerWidget {
   const ShiftManagementScreen({Key? key}) : super(key: key);
@@ -229,27 +229,26 @@ class ShiftManagementScreen extends HookConsumerWidget {
               )
             : InkWell(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ShiftEditScreen(
-                        shiftId: shiftId,
-                        date: date,
-                        shiftType: shiftType,
-                      ),
-                    ),
-                  );
+                  // Navigator.pushの代わりにナビゲーションプロバイダーを使用
+                  ref.read(navigationProvider.notifier).navigateTo(
+                        ScreenType.shiftEdit,
+                        params: {
+                          'shiftId': shiftId,
+                          'date': date,
+                          'shiftType': shiftType,
+                        },
+                      );
                 },
                 child: Container(
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: primaryColor,  // 背景をprimaryColorに変更
+                    color: primaryColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.edit,
-                    color: backgroundColor,  // アイコンをfafafaに変更
+                    color: backgroundColor,
                   ),
                 ),
               ),

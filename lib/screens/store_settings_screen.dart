@@ -2,9 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../providers/shift_provider.dart';
+import '../providers/navigation_provider.dart';
 import '../theme/app_theme.dart';
-import 'skill_management_screen.dart';
-import 'people_management_screen.dart';
 
 class StoreSettingsScreen extends HookConsumerWidget {
   const StoreSettingsScreen({Key? key}) : super(key: key);
@@ -33,12 +32,10 @@ class StoreSettingsScreen extends HookConsumerWidget {
                 const Spacer(),
                 ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SkillManagementScreen(),
-                      ),
-                    );
+                    // Navigator.pushの代わりにナビゲーションプロバイダーを使用
+                    ref
+                        .read(navigationProvider.notifier)
+                        .navigateTo(ScreenType.skillManagement);
                   },
                   icon: const Icon(Icons.edit),
                   label: const Text('編集'),
@@ -85,12 +82,10 @@ class StoreSettingsScreen extends HookConsumerWidget {
                 const Spacer(),
                 ElevatedButton.icon(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const PeopleManagementScreen(),
-                      ),
-                    );
+                    // Navigator.pushの代わりにナビゲーションプロバイダーを使用
+                    ref
+                        .read(navigationProvider.notifier)
+                        .navigateTo(ScreenType.peopleManagement);
                   },
                   icon: const Icon(Icons.edit),
                   label: const Text('編集'),

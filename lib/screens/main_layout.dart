@@ -1,11 +1,14 @@
 // screens/main_layout.dart
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import '../theme/app_theme.dart';
+import '../providers/navigation_provider.dart';
 import 'dashboard_screen.dart';
 import 'shift_management_screen.dart';
+import 'shift_edit_screen.dart';
 import 'store_settings_screen.dart';
+import 'skill_management_screen.dart';
+import 'people_management_screen.dart';
 import 'help_screen.dart';
 
 class MainLayout extends HookConsumerWidget {
@@ -13,20 +16,13 @@ class MainLayout extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedIndex = useState(0);
-
-    final screens = [
-      const DashboardScreen(),
-      const ShiftManagementScreen(),
-      const StoreSettingsScreen(),
-      const HelpScreen(),
-    ];
+    final navigationState = ref.watch(navigationProvider);
 
     return Scaffold(
       backgroundColor: backgroundColor,
       body: Column(
         children: [
-          // AppBar（最上部）
+          // AppBar（最上部・固定）
           Container(
             height: 60,
             color: backgroundColor,
@@ -54,7 +50,7 @@ class MainLayout extends HookConsumerWidget {
           Expanded(
             child: Row(
               children: [
-                // サイドバー
+                // サイドバー（固定）
                 Container(
                   width: 250,
                   color: primaryColor,
@@ -65,33 +61,44 @@ class MainLayout extends HookConsumerWidget {
                       _buildMenuItem(
                         icon: Icons.home,
                         label: 'ホーム',
-                        isSelected: selectedIndex.value == 0,
-                        onTap: () => selectedIndex.value = 0,
+                        isSelected: navigationState.screenType == ScreenType.dashboard,
+                        onTap: () => ref
+                            .read(navigationProvider.notifier)
+                            .navigateTo(ScreenType.dashboard),
                       ),
                       _buildMenuItem(
                         icon: Icons.edit_calendar,
                         label: 'シフト管理',
-                        isSelected: selectedIndex.value == 1,
-                        onTap: () => selectedIndex.value = 1,
+                        isSelected: navigationState.screenType == ScreenType.shiftManagement ||
+                            navigationState.screenType == ScreenType.shiftEdit,
+                        onTap: () => ref
+                            .read(navigationProvider.notifier)
+                            .navigateTo(ScreenType.shiftManagement),
                       ),
                       _buildMenuItem(
                         icon: Icons.settings,
                         label: '店舗情報',
-                        isSelected: selectedIndex.value == 2,
-                        onTap: () => selectedIndex.value = 2,
+                        isSelected: navigationState.screenType == ScreenType.storeSettings ||
+                            navigationState.screenType == ScreenType.skillManagement ||
+                            navigationState.screenType == ScreenType.peopleManagement,
+                        onTap: () => ref
+                            .read(navigationProvider.notifier)
+                            .navigateTo(ScreenType.storeSettings),
                       ),
                       _buildMenuItem(
                         icon: Icons.help_outline,
                         label: '使い方',
-                        isSelected: selectedIndex.value == 3,
-                        onTap: () => selectedIndex.value = 3,
+                        isSelected: navigationState.screenType == ScreenType.help,
+                        onTap: () => ref
+                            .read(navigationProvider.notifier)
+                            .navigateTo(ScreenType.help),
                       ),
                     ],
                   ),
                 ),
-                // メインコンテンツエリア
+                // メインコンテンツエリア（切り替わる）
                 Expanded(
-                  child: screens[selectedIndex.value],
+                  child: _buildMainContent(navigationState),
                 ),
               ],
             ),
@@ -99,6 +106,32 @@ class MainLayout extends HookConsumerWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildMainContent(NavigationState navigationState) {
+    switch (navigationState.screenType) {
+      case ScreenType.dashboard:
+        return const DashboardScreen();
+      case ScreenType.shiftManagement:
+        return const ShiftManagementScreen();
+      case ScreenType.shiftEdit:
+        final shiftId = navigationState.params['shiftId'] as String;
+        final date = navigationState.params['date'] as DateTime;
+        final shiftType = navigationState.params['shiftType'] as String;
+        return ShiftEditScreen(
+          shiftId: shiftId,
+          date: date,
+          shiftType: shiftType,
+        );
+      case ScreenType.storeSettings:
+        return const StoreSettingsScreen();
+      case ScreenType.skillManagement:
+        return const SkillManagementScreen();
+      case ScreenType.peopleManagement:
+        return const PeopleManagementScreen();
+      case ScreenType.help:
+        return const HelpScreen();
+    }
   }
 
   Widget _buildMenuItem({

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import '../providers/shift_provider.dart';
+import '../providers/navigation_provider.dart';
 import '../models/shift_data.dart';
 import '../theme/app_theme.dart';
 
@@ -13,56 +14,82 @@ class PeopleManagementScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final shiftData = ref.watch(shiftDataProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('スタッフ管理'),
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: shiftData.people.length,
-        itemBuilder: (context, index) {
-          final person = shiftData.people[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              border: Border.all(color: borderColor),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: ListTile(
-              title: Text(person.name),
-              subtitle: Text('スキル: ${person.skills.join(', ')}'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () {
-                      _showPersonDialog(context, ref, person: person);
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete),
-                    color: Colors.red,
-                    onPressed: () {
-                      _showDeleteConfirmDialog(context, ref, person);
-                    },
-                  ),
-                ],
+    return Column(
+      children: [
+        // 戻るボタンとタイトル
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(Icons.arrow_back, color: primaryColor),
+                onPressed: () {
+                  ref.read(navigationProvider.notifier).goBack();
+                },
               ),
-            ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showPersonDialog(context, ref);
-        },
-        backgroundColor: primaryColor,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+              Text(
+                'スタッフ管理',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: () {
+                  _showPersonDialog(context, ref);
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('追加'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: shiftData.people.length,
+            itemBuilder: (context, index) {
+              final person = shiftData.people[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  border: Border.all(color: borderColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListTile(
+                  title: Text(person.name),
+                  subtitle: Text('スキル: ${person.skills.join(', ')}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () {
+                          _showPersonDialog(context, ref, person: person);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        color: Colors.red,
+                        onPressed: () {
+                          _showDeleteConfirmDialog(context, ref, person);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
