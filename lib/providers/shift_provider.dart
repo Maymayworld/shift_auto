@@ -23,6 +23,76 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     await StorageService.saveShiftData(state);
   }
 
+  /// シフトパターンを追加
+  void addShiftPattern(ShiftPattern pattern) {
+    if (state.shiftPatterns.any((p) => p.id == pattern.id || p.name == pattern.name)) {
+      return; // 重複は追加しない
+    }
+    state = state.copyWith(
+      shiftPatterns: [...state.shiftPatterns, pattern],
+    );
+    _saveData();
+  }
+
+  /// シフトパターンを削除
+  void removeShiftPattern(String patternId) {
+    // 最後の1つは削除できない
+    if (state.shiftPatterns.length <= 1) return;
+    
+    state = state.copyWith(
+      shiftPatterns: state.shiftPatterns.where((p) => p.id != patternId).toList(),
+    );
+    
+    // このパターンを使用しているdailyShiftsを削除
+    final newDailyShifts = Map<String, DailyShift>.from(state.dailyShifts);
+    newDailyShifts.removeWhere((key, value) => key.contains('-$patternId'));
+    
+    state = state.copyWith(dailyShifts: newDailyShifts);
+    _saveData();
+  }
+
+  /// シフトパターンを更新
+  void updateShiftPattern(ShiftPattern pattern) {
+    state = state.copyWith(
+      shiftPatterns: state.shiftPatterns
+          .map((p) => p.id == pattern.id ? pattern : p)
+          .toList(),
+    );
+    _saveData();
+  }
+
+  /// シフトパターンのデフォルト必要人数を設定
+  void setPatternDefaultRequired(String patternId, String skill, int count) {
+    final pattern = state.shiftPatterns.firstWhere((p) => p.id == patternId);
+    final newDefaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
+    
+    if (count > 0) {
+      newDefaultRequired[skill] = count;
+    } else {
+      newDefaultRequired.remove(skill);
+    }
+    
+    updateShiftPattern(pattern.copyWith(defaultRequiredMap: newDefaultRequired));
+  }
+
+  /// シフトパターンの順序を更新
+  void reorderShiftPatterns(int oldIndex, int newIndex) {
+    final patterns = List<ShiftPattern>.from(state.shiftPatterns);
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    final item = patterns.removeAt(oldIndex);
+    patterns.insert(newIndex, item);
+    
+    // sortOrderを更新
+    final updatedPatterns = patterns.asMap().entries.map((entry) {
+      return entry.value.copyWith(sortOrder: entry.key);
+    }).toList();
+    
+    state = state.copyWith(shiftPatterns: updatedPatterns);
+    _saveData();
+  }
+
   /// 人物を追加
   void addPerson(Person person) {
     state = state.copyWith(
@@ -48,12 +118,12 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newWantsMap = Map<String, String>.from(shift.wantsMap);
       newWantsMap.remove(personId);
       
-      final newConstCustomer = Map<String, String>.from(shift.constCustomer);
-      newConstCustomer.remove(personId);
+      final newConstStaff = Map<String, String>.from(shift.constStaff);
+      newConstStaff.remove(personId);
       
       newDailyShifts[entry.key] = shift.copyWith(
         wantsMap: newWantsMap,
-        constCustomer: newConstCustomer,
+        constStaff: newConstStaff,
       );
     }
     
@@ -111,13 +181,13 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newWantsMap = Map<String, String>.from(shift.wantsMap);
       newWantsMap.removeWhere((key, value) => value == skill);
       
-      final newConstCustomer = Map<String, String>.from(shift.constCustomer);
-      newConstCustomer.removeWhere((key, value) => value == skill);
+      final newConstStaff = Map<String, String>.from(shift.constStaff);
+      newConstStaff.removeWhere((key, value) => value == skill);
       
       newDailyShifts[entry.key] = shift.copyWith(
         requiredMap: newRequiredMap,
         wantsMap: newWantsMap,
-        constCustomer: newConstCustomer,
+        constStaff: newConstStaff,
       );
     }
     
@@ -131,6 +201,29 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   /// 日付ごとのシフトデータを更新
   void updateDailyShift(DailyShift dailyShift) {
     final newDailyShifts = Map<String, DailyShift>.from(state.dailyShifts);
+    
+    // 新規作成の場合、デフォルトの必要人数を適用
+    if (!state.dailyShifts.containsKey(dailyShift.shiftId) && 
+        dailyShift.requiredMap.isEmpty) {
+      // shiftIdからパターンIDを取得
+      try {
+        final parts = dailyShift.shiftId.split('-');
+        if (parts.length >= 4) {
+          final patternId = parts.sublist(3).join('-');
+          final pattern = state.shiftPatterns.firstWhere(
+            (p) => p.id == patternId,
+            orElse: () => state.shiftPatterns.first,
+          );
+          // デフォルト値を適用
+          dailyShift = dailyShift.copyWith(
+            requiredMap: Map<String, int>.from(pattern.defaultRequiredMap),
+          );
+        }
+      } catch (e) {
+        // エラーが発生した場合はそのまま保存
+      }
+    }
+    
     newDailyShifts[dailyShift.shiftId] = dailyShift;
     state = state.copyWith(dailyShifts: newDailyShifts);
     _saveData();
@@ -170,31 +263,31 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   }
 
   /// 特定の日付のシフトに固定スタッフを設定
-  void setDailyConstCustomer(String shiftId, String personId, String skill) {
+  void setDailyConstStaff(String shiftId, String personId, String skill) {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
-    final newConstCustomer = Map<String, String>.from(shift.constCustomer);
-    newConstCustomer[personId] = skill;
+    final newConstStaff = Map<String, String>.from(shift.constStaff);
+    newConstStaff[personId] = skill;
     
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap[personId] = skill;
     
     updateDailyShift(shift.copyWith(
-      constCustomer: newConstCustomer,
+      constStaff: newConstStaff,
       wantsMap: newWantsMap,
     ));
   }
 
   /// 特定の日付のシフトの固定スタッフを削除
-  void removeDailyConstCustomer(String shiftId, String personId) {
+  void removeDailyConstStaff(String shiftId, String personId) {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
-    final newConstCustomer = Map<String, String>.from(shift.constCustomer);
-    newConstCustomer.remove(personId);
+    final newConstStaff = Map<String, String>.from(shift.constStaff);
+    newConstStaff.remove(personId);
     
-    updateDailyShift(shift.copyWith(constCustomer: newConstCustomer));
+    updateDailyShift(shift.copyWith(constStaff: newConstStaff));
   }
 
   /// シフトを計算
@@ -210,7 +303,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
 
     // 固定スタッフを除外したwantsMapを作成
     final filteredWantsMap = Map<String, String>.from(shift.wantsMap);
-    for (final personId in shift.constCustomer.keys) {
+    for (final personId in shift.constStaff.keys) {
       filteredWantsMap.remove(personId);
     }
 
@@ -219,7 +312,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       peopleMap: peopleMap,
       wantsMap: filteredWantsMap,
       requiredMap: shift.requiredMap,
-      constCustomer: shift.constCustomer,
+      constCustomer: shift.constStaff,
       sorryScores: state.sorryScores,
     );
 

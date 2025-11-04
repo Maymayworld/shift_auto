@@ -1,4 +1,59 @@
 // models/shift_data.dart
+/// シフトパターン（通し、早番、遅番など）
+class ShiftPattern {
+  final String id;
+  final String name;
+  final int sortOrder;
+  final Map<String, int> defaultRequiredMap; // skill -> count のデフォルト値
+
+  ShiftPattern({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    Map<String, int>? defaultRequiredMap,
+  }) : defaultRequiredMap = defaultRequiredMap ?? {};
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'sortOrder': sortOrder,
+        'defaultRequiredMap': defaultRequiredMap,
+      };
+
+  factory ShiftPattern.fromJson(Map<String, dynamic> json) {
+    Map<String, int> defaultRequired = {};
+    try {
+      if (json['defaultRequiredMap'] != null) {
+        defaultRequired = Map<String, int>.from(json['defaultRequiredMap'] as Map);
+      }
+    } catch (e) {
+      // エラーが発生した場合は空のマップを使用
+      defaultRequired = {};
+    }
+    
+    return ShiftPattern(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      sortOrder: json['sortOrder'] as int? ?? 0,
+      defaultRequiredMap: defaultRequired,
+    );
+  }
+
+  ShiftPattern copyWith({
+    String? id,
+    String? name,
+    int? sortOrder,
+    Map<String, int>? defaultRequiredMap,
+  }) {
+    return ShiftPattern(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+      defaultRequiredMap: defaultRequiredMap ?? this.defaultRequiredMap,
+    );
+  }
+}
+
 /// 人物（スタッフ）
 class Person {
   final String id;
@@ -38,12 +93,12 @@ class Person {
 
 /// 日付ごとのシフトデータ
 class DailyShift {
-  final String shiftId; // 例: "2025-11-03-early"
+  final String shiftId; // 例: "2025-11-03-through"
   final DateTime date;
-  final String shiftType; // "早番" or "遅番"
-  final Map<String, String> wantsMap; // personId -> skill or 'SA'
+  final String shiftType; // "通し", "早番", "遅番" など
+  final Map<String, String> wantsMap; // personId -> skill or 'スキル指定なし'
   final Map<String, int> requiredMap; // skill -> count
-  final Map<String, String> constCustomer; // personId -> skill
+  final Map<String, String> constStaff; // personId -> skill (固定スタッフ)
   final Map<String, List<String>>? resultMap; // skill -> [personIds]
   final bool isCalculated; // 計算済みかどうか
 
@@ -53,7 +108,7 @@ class DailyShift {
     required this.shiftType,
     required this.wantsMap,
     required this.requiredMap,
-    required this.constCustomer,
+    required this.constStaff,
     this.resultMap,
     this.isCalculated = false,
   });
@@ -64,7 +119,7 @@ class DailyShift {
         'shiftType': shiftType,
         'wantsMap': wantsMap,
         'requiredMap': requiredMap,
-        'constCustomer': constCustomer,
+        'constStaff': constStaff,
         'resultMap': resultMap,
         'isCalculated': isCalculated,
       };
@@ -83,7 +138,7 @@ class DailyShift {
       shiftType: json['shiftType'] as String,
       wantsMap: Map<String, String>.from(json['wantsMap'] as Map? ?? {}),
       requiredMap: Map<String, int>.from(json['requiredMap'] as Map? ?? {}),
-      constCustomer: Map<String, String>.from(json['constCustomer'] as Map? ?? {}),
+      constStaff: Map<String, String>.from(json['constStaff'] as Map? ?? json['constCustomer'] as Map? ?? {}),
       resultMap: resultMap,
       isCalculated: json['isCalculated'] as bool? ?? false,
     );
@@ -95,7 +150,7 @@ class DailyShift {
     String? shiftType,
     Map<String, String>? wantsMap,
     Map<String, int>? requiredMap,
-    Map<String, String>? constCustomer,
+    Map<String, String>? constStaff,
     Map<String, List<String>>? resultMap,
     bool? isCalculated,
   }) {
@@ -105,7 +160,7 @@ class DailyShift {
       shiftType: shiftType ?? this.shiftType,
       wantsMap: wantsMap ?? this.wantsMap,
       requiredMap: requiredMap ?? this.requiredMap,
-      constCustomer: constCustomer ?? this.constCustomer,
+      constStaff: constStaff ?? this.constStaff,
       resultMap: resultMap ?? this.resultMap,
       isCalculated: isCalculated ?? this.isCalculated,
     );
@@ -122,12 +177,14 @@ class DailyShift {
 class ShiftData {
   final List<Person> people;
   final List<String> skills;
+  final List<ShiftPattern> shiftPatterns;
   final Map<String, int> sorryScores; // personId -> score
   final Map<String, DailyShift> dailyShifts; // shiftId -> DailyShift
 
   ShiftData({
     required this.people,
     required this.skills,
+    required this.shiftPatterns,
     required this.sorryScores,
     required this.dailyShifts,
   });
@@ -135,6 +192,7 @@ class ShiftData {
   Map<String, dynamic> toJson() => {
         'people': people.map((p) => p.toJson()).toList(),
         'skills': skills,
+        'shiftPatterns': shiftPatterns.map((p) => p.toJson()).toList(),
         'sorryScores': sorryScores,
         'dailyShifts': dailyShifts.map((key, value) => MapEntry(key, value.toJson())),
       };
@@ -150,6 +208,26 @@ class ShiftData {
       dailyShifts = {};
     }
 
+    // shiftPatternsの読み込み（後方互換性のためデフォルト値を設定）
+    List<ShiftPattern> shiftPatterns;
+    try {
+      if (json['shiftPatterns'] != null && json['shiftPatterns'] is List) {
+        shiftPatterns = (json['shiftPatterns'] as List)
+            .map((p) => ShiftPattern.fromJson(p as Map<String, dynamic>))
+            .toList();
+      } else {
+        // デフォルトは「通し」のみ
+        shiftPatterns = [
+          ShiftPattern(id: 'through', name: '通し', sortOrder: 0),
+        ];
+      }
+    } catch (e) {
+      // エラーが発生した場合もデフォルト値を設定
+      shiftPatterns = [
+        ShiftPattern(id: 'through', name: '通し', sortOrder: 0),
+      ];
+    }
+
     return ShiftData(
       people: json['people'] != null
           ? (json['people'] as List)
@@ -159,6 +237,7 @@ class ShiftData {
       skills: json['skills'] != null 
           ? List<String>.from(json['skills'] as List)
           : [],
+      shiftPatterns: shiftPatterns,
       sorryScores: json['sorryScores'] != null
           ? Map<String, int>.from(json['sorryScores'] as Map)
           : {},
@@ -169,22 +248,27 @@ class ShiftData {
   ShiftData copyWith({
     List<Person>? people,
     List<String>? skills,
+    List<ShiftPattern>? shiftPatterns,
     Map<String, int>? sorryScores,
     Map<String, DailyShift>? dailyShifts,
   }) {
     return ShiftData(
       people: people ?? this.people,
       skills: skills ?? this.skills,
+      shiftPatterns: shiftPatterns ?? this.shiftPatterns,
       sorryScores: sorryScores ?? this.sorryScores,
       dailyShifts: dailyShifts ?? this.dailyShifts,
     );
   }
 
-  /// サンプルデータを生成（空のデータ）
+  /// サンプルデータを生成（デフォルトで「通し」パターンを含む）
   static ShiftData sample() {
     return ShiftData(
       people: [],
       skills: [],
+      shiftPatterns: [
+        ShiftPattern(id: 'through', name: '通し', sortOrder: 0),
+      ],
       sorryScores: {},
       dailyShifts: {},
     );
@@ -195,14 +279,33 @@ class ShiftData {
     if (dailyShifts.containsKey(shiftId)) {
       return dailyShifts[shiftId]!;
     }
+    
     // 存在しない場合は空のシフトを返す
+    // shiftIdからパターンIDを取得してデフォルト値を適用
+    Map<String, int> defaultRequired = {};
+    try {
+      // shiftIdの形式: "2025-11-4-through"
+      final parts = shiftId.split('-');
+      if (parts.length >= 4) {
+        final patternId = parts.sublist(3).join('-');
+        final pattern = shiftPatterns.firstWhere(
+          (p) => p.id == patternId,
+          orElse: () => shiftPatterns.first,
+        );
+        defaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
+      }
+    } catch (e) {
+      // エラーが発生した場合は空のマップを使用
+      defaultRequired = {};
+    }
+    
     return DailyShift(
       shiftId: shiftId,
       date: date,
       shiftType: shiftType,
       wantsMap: {},
-      requiredMap: {},
-      constCustomer: {},
+      requiredMap: defaultRequired,
+      constStaff: {},
     );
   }
 }

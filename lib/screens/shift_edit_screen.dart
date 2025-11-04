@@ -10,7 +10,7 @@ import '../theme/app_theme.dart';
 class ShiftEditScreen extends HookConsumerWidget {
   final String shiftId;
   final DateTime date;
-  final String shiftType; // '早番' or '遅番'
+  final String shiftType;
 
   const ShiftEditScreen({
     Key? key,
@@ -28,13 +28,30 @@ class ShiftEditScreen extends HookConsumerWidget {
     useEffect(() {
       Future.microtask(() {
         if (!shiftData.dailyShifts.containsKey(shiftId)) {
+          // デフォルトの必要人数を取得
+          Map<String, int> defaultRequired = {};
+          try {
+            final parts = shiftId.split('-');
+            if (parts.length >= 4) {
+              final patternId = parts.sublist(3).join('-');
+              final pattern = shiftData.shiftPatterns.firstWhere(
+                (p) => p.id == patternId,
+                orElse: () => shiftData.shiftPatterns.first,
+              );
+              defaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
+            }
+          } catch (e) {
+            // エラーが発生した場合は空のマップを使用
+            defaultRequired = {};
+          }
+          
           final newShift = DailyShift(
             shiftId: shiftId,
             date: date,
             shiftType: shiftType,
             wantsMap: {},
-            requiredMap: {},
-            constCustomer: {},
+            requiredMap: defaultRequired,
+            constStaff: {},
           );
           ref.read(shiftDataProvider.notifier).updateDailyShift(newShift);
         }
@@ -191,10 +208,13 @@ class ShiftEditScreen extends HookConsumerWidget {
           const SizedBox(height: 16),
           ...shiftData.people.map((person) {
             final currentWant = dailyShift.wantsMap[person.id];
-            final constSkill = dailyShift.constCustomer[person.id];
+            final constSkill = dailyShift.constStaff[person.id];
             final isConst = constSkill != null;
             final hasWant = currentWant != null || isConst;
             final displayWant = isConst ? constSkill : currentWant;
+            
+            // 「スキル指定なし」の表示
+            final displayText = displayWant == 'スキル指定なし' ? 'スキル指定なし' : displayWant;
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -209,8 +229,8 @@ class ShiftEditScreen extends HookConsumerWidget {
                 title: Text(person.name),
                 subtitle: Text(
                   isConst
-                      ? '固定配置: $displayWant'
-                      : (hasWant ? '希望: $displayWant' : '希望なし'),
+                      ? '固定配置: $displayText'
+                      : (hasWant ? '希望: $displayText' : '希望なし'),
                   style: TextStyle(
                     color: isConst
                         ? Colors.orange[700]
@@ -312,7 +332,7 @@ class ShiftEditScreen extends HookConsumerWidget {
             ListTile(
               title: const Text('スキル指定なし (どのスキルでもOK)'),
               leading: Radio<String>(
-                value: 'SA',
+                value: 'スキル指定なし',
                 groupValue: currentWant,
                 onChanged: (value) {
                   if (value != null) {

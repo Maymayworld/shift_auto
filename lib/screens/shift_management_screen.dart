@@ -83,14 +83,14 @@ class ShiftManagementScreen extends HookConsumerWidget {
                             selectedShifts.value = {};
                             isSelectionMode.value = false;
                           } else {
-                            // 全てのシフトを計算（60日 × 2シフト = 120シフト）
+                            // 全てのシフトを計算
+                            final shiftData = ref.read(shiftDataProvider);
                             final allShiftIds = <String>[];
                             for (int i = 0; i < 60; i++) {
                               final date = DateTime.now().add(Duration(days: i));
-                              // 早番
-                              allShiftIds.add('${date.year}-${date.month}-${date.day}-early');
-                              // 遅番
-                              allShiftIds.add('${date.year}-${date.month}-${date.day}-late');
+                              for (final pattern in shiftData.shiftPatterns) {
+                                allShiftIds.add('${date.year}-${date.month}-${date.day}-${pattern.id}');
+                              }
                             }
                             await ref
                                 .read(shiftDataProvider.notifier)
@@ -127,19 +127,21 @@ class ShiftManagementScreen extends HookConsumerWidget {
             child: Consumer(
               builder: (context, ref, child) {
                 final shiftData = ref.watch(shiftDataProvider);
+                final totalShifts = 60 * shiftData.shiftPatterns.length;
                 
                 return ListView.builder(
-                  itemCount: 120, // 60日 × 2シフト（早番・遅番）
+                  itemCount: totalShifts,
                   itemBuilder: (context, index) {
-                    // index / 2 で日付を計算、index % 2 でシフトタイプを決定
-                    final dayIndex = index ~/ 2; // 整数除算
-                    final isEarlyShift = index % 2 == 0; // 偶数: 早番、奇数: 遅番
+                    // パターン数で分割
+                    final patternCount = shiftData.shiftPatterns.length;
+                    final dayIndex = index ~/ patternCount;
+                    final patternIndex = index % patternCount;
                     
                     final date = DateTime.now().add(Duration(days: dayIndex));
-                    final shiftType = isEarlyShift ? '早番' : '遅番';
-                    final shiftId = '${date.year}-${date.month}-${date.day}-${isEarlyShift ? 'early' : 'late'}';
+                    final pattern = shiftData.shiftPatterns[patternIndex];
+                    final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
                     
-                    final dailyShift = shiftData.getDailyShift(shiftId, date, shiftType);
+                    final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
 
                     // フィルタリング
                     if (filterIndex.value == 1 && dailyShift.isCalculated) {
@@ -153,7 +155,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                       context: context,
                       ref: ref,
                       date: date,
-                      isEarlyShift: isEarlyShift,
+                      pattern: pattern,
                       isSelectionMode: isSelectionMode.value,
                       shiftId: shiftId,
                       dailyShift: dailyShift,
@@ -206,7 +208,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
     required BuildContext context,
     required WidgetRef ref,
     required DateTime date,
-    required bool isEarlyShift,
+    required ShiftPattern pattern,
     required bool isSelectionMode,
     required String shiftId,
     required DailyShift dailyShift,
@@ -214,7 +216,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
     required Function(bool?) onCheckboxChanged,
   }) {
     final dateStr = '${date.month}/${date.day}(${_getWeekday(date)})';
-    final shiftType = isEarlyShift ? '早番' : '遅番';
     final shiftData = ref.read(shiftDataProvider);
 
     return Container(
@@ -232,13 +233,12 @@ class ShiftManagementScreen extends HookConsumerWidget {
               )
             : InkWell(
                 onTap: () {
-                  // ナビゲーションプロバイダーを使用
                   ref.read(navigationProvider.notifier).navigateTo(
                         ScreenType.shiftEdit,
                         params: {
                           'shiftId': shiftId,
                           'date': date,
-                          'shiftType': shiftType,
+                          'shiftType': pattern.name,
                         },
                       );
                 },
@@ -259,7 +259,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '$dateStr $shiftType',
+              '$dateStr ${pattern.name}',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
