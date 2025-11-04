@@ -76,11 +76,18 @@ class MainLayout extends HookConsumerWidget {
                             .navigateTo(ScreenType.shiftManagement),
                       ),
                       _buildMenuItem(
+                        icon: Icons.people,
+                        label: 'スタッフ管理',
+                        isSelected: navigationState.screenType == ScreenType.peopleManagement,
+                        onTap: () => ref
+                            .read(navigationProvider.notifier)
+                            .navigateTo(ScreenType.peopleManagement),
+                      ),
+                      _buildMenuItem(
                         icon: Icons.settings,
                         label: '店舗情報',
                         isSelected: navigationState.screenType == ScreenType.storeSettings ||
-                            navigationState.screenType == ScreenType.skillManagement ||
-                            navigationState.screenType == ScreenType.peopleManagement,
+                            navigationState.screenType == ScreenType.skillManagement,
                         onTap: () => ref
                             .read(navigationProvider.notifier)
                             .navigateTo(ScreenType.storeSettings),

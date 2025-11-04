@@ -54,8 +54,10 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
         navigateTo(ScreenType.shiftManagement);
         break;
       case ScreenType.skillManagement:
-      case ScreenType.peopleManagement:
         navigateTo(ScreenType.storeSettings);
+        break;
+      case ScreenType.peopleManagement:
+        navigateTo(ScreenType.dashboard);
         break;
       default:
         navigateTo(ScreenType.dashboard);

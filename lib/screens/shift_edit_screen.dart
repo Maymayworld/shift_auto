@@ -85,103 +85,60 @@ class ShiftEditScreen extends HookConsumerWidget {
           ),
           const SizedBox(height: 16),
           
-          // 日付情報
+          // 日付情報と必要人数
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: primaryColor.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.calendar_today, color: primaryColor),
-                const SizedBox(width: 12),
-                Text(
-                  '${date.year}年${date.month}月${date.day}日 (${_getWeekday(date)}) $shiftType',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-
-          // 必要人数設定
-          Text(
-            '必要人数',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...shiftData.skills.map((skill) {
-            final currentCount = dailyShift.requiredMap[skill] ?? 0;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
+                Row(
                   children: [
+                    Icon(Icons.calendar_today, color: primaryColor),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        skill,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: currentCount > 0
-                          ? () {
-                              ref
-                                  .read(shiftDataProvider.notifier)
-                                  .setDailyRequired(shiftId, skill, currentCount - 1);
-                            }
-                          : null,
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '$currentCount人',
+                        '${date.year}年${date.month}月${date.day}日 (${_getWeekday(date)}) $shiftType',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: primaryColor,
                         ),
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
+                      icon: Icon(Icons.edit, color: primaryColor),
                       onPressed: () {
-                        ref
-                            .read(shiftDataProvider.notifier)
-                            .setDailyRequired(shiftId, skill, currentCount + 1);
+                        _showEditRequiredDialog(context, ref, shiftId, dailyShift);
                       },
+                      tooltip: '必要人数を編集',
                     ),
                   ],
                 ),
-              ),
-            );
-          }),
+                if (dailyShift.requiredMap.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: dailyShift.requiredMap.entries.map((entry) {
+                      return Chip(
+                        label: Text('${entry.key}: ${entry.value}人'),
+                        backgroundColor: Colors.white.withOpacity(0.8),
+                        labelStyle: TextStyle(
+                          fontSize: 13,
+                          color: primaryColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(height: 32),
 
           // 希望シフト
@@ -206,76 +163,111 @@ class ShiftEditScreen extends HookConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
-          ...shiftData.people.map((person) {
-            final currentWant = dailyShift.wantsMap[person.id];
-            final constSkill = dailyShift.constStaff[person.id];
-            final isConst = constSkill != null;
-            final hasWant = currentWant != null || isConst;
-            final displayWant = isConst ? constSkill : currentWant;
-            
-            // 「スキル指定なし」の表示
-            final displayText = displayWant == 'スキル指定なし' ? 'スキル指定なし' : displayWant;
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: shiftData.people.map((person) {
+              final currentWant = dailyShift.wantsMap[person.id];
+              final constSkill = dailyShift.constStaff[person.id];
+              final isConst = constSkill != null;
+              final hasWant = currentWant != null || isConst;
+              final displayWant = isConst ? constSkill : currentWant;
+              
+              // 「スキル指定なし」の表示
+              final displayText = displayWant == 'スキル指定なし' ? 'スキル指定なし' : displayWant;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: isConst
-                    ? Colors.orange[50]
-                    : (hasWant ? Colors.blue[50] : backgroundColor),
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: ListTile(
-                title: Text(person.name),
-                subtitle: Text(
-                  isConst
-                      ? '固定配置: $displayText'
-                      : (hasWant ? '希望: $displayText' : '希望なし'),
-                  style: TextStyle(
-                    color: isConst
-                        ? Colors.orange[700]
-                        : (hasWant ? Colors.blue[700] : Colors.grey),
-                    fontWeight: isConst ? FontWeight.bold : FontWeight.normal,
-                  ),
+              return Container(
+                width: 200,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isConst
+                      ? Colors.orange[50]
+                      : (hasWant ? Colors.blue[50] : backgroundColor),
+                  border: Border.all(color: borderColor),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                trailing: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (hasWant && !isConst)
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () {
-                          ref
-                              .read(shiftDataProvider.notifier)
-                              .removeDailyWant(shiftId, person.id);
-                        },
-                        tooltip: '希望を削除',
-                      ),
-                    if (!isConst)
-                      IconButton(
-                        icon: Icon(
-                          hasWant ? Icons.edit : Icons.add,
-                          color: primaryColor,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            person.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        onPressed: () {
-                          _showWantDialog(
-                              context, ref, shiftId, person.id, person.name, person.skills);
-                        },
-                        tooltip: hasWant ? '希望を編集' : '希望を追加',
+                        if (isConst)
+                          Icon(
+                            Icons.push_pin,
+                            color: Colors.orange[700],
+                            size: 16,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      isConst
+                          ? '固定: $displayText'
+                          : (hasWant ? '希望: $displayText' : '希望なし'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isConst
+                            ? Colors.orange[700]
+                            : (hasWant ? Colors.blue[700] : Colors.grey),
                       ),
-                    if (isConst)
-                      Tooltip(
-                        message: '固定スタッフとして設定されています',
-                        child: Icon(
-                          Icons.push_pin,
-                          color: Colors.orange[700],
-                        ),
-                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (hasWant && !isConst)
+                          IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            color: Colors.red,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            onPressed: () {
+                              ref
+                                  .read(shiftDataProvider.notifier)
+                                  .removeDailyWant(shiftId, person.id);
+                            },
+                            tooltip: '希望を削除',
+                          ),
+                        if (!isConst)
+                          IconButton(
+                            icon: Icon(
+                              hasWant ? Icons.edit : Icons.add,
+                              size: 16,
+                            ),
+                            color: primaryColor,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                            onPressed: () {
+                              _showWantDialog(
+                                  context, ref, shiftId, person.id, person.name, person.skills);
+                            },
+                            tooltip: hasWant ? '希望を編集' : '希望を追加',
+                          ),
+                      ],
+                    ),
                   ],
                 ),
-              ),
-            );
-          }),
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 32),
 
           // 保存ボタン
@@ -307,6 +299,102 @@ class ShiftEditScreen extends HookConsumerWidget {
   String _getWeekday(DateTime date) {
     const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
     return weekdays[date.weekday - 1];
+  }
+
+  void _showEditRequiredDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String shiftId,
+    DailyShift dailyShift,
+  ) {
+    final shiftData = ref.read(shiftDataProvider);
+    
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('必要人数を編集'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: shiftData.skills.map((skill) {
+                  final currentCount = dailyShift.requiredMap[skill] ?? 0;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      border: Border.all(color: borderColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              skill,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: currentCount > 0
+                                ? () {
+                                    ref
+                                        .read(shiftDataProvider.notifier)
+                                        .setDailyRequired(shiftId, skill, currentCount - 1);
+                                    setState(() {});
+                                  }
+                                : null,
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '$currentCount人',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: primaryColor,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              ref
+                                  .read(shiftDataProvider.notifier)
+                                  .setDailyRequired(shiftId, skill, currentCount + 1);
+                              setState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('閉じる'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showWantDialog(

@@ -1,7 +1,6 @@
 // screens/skill_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import '../providers/shift_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../theme/app_theme.dart';
@@ -12,14 +11,14 @@ class SkillManagementScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shiftData = ref.watch(shiftDataProvider);
-    final skillController = useTextEditingController();
 
-    return Column(
-      children: [
-        // 戻るボタンとタイトル
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ヘッダー
+          Row(
             children: [
               IconButton(
                 icon: Icon(Icons.arrow_back, color: primaryColor),
@@ -35,105 +34,161 @@ class SkillManagementScreen extends HookConsumerWidget {
                   color: textColor,
                 ),
               ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: skillController,
-                  decoration: const InputDecoration(
-                    labelText: '新しいスキル',
-                    border: OutlineInputBorder(),
-                    hintText: '例: ホール、キッチン',
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
+              const Spacer(),
+              ElevatedButton.icon(
                 onPressed: () {
-                  if (skillController.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('スキル名を入力してください')),
-                    );
-                    return;
-                  }
-
-                  if (shiftData.skills.contains(skillController.text)) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('既に存在するスキルです')),
-                    );
-                    return;
-                  }
-
-                  ref.read(shiftDataProvider.notifier).addSkill(skillController.text);
-                  skillController.clear();
+                  _showAddSkillDialog(context, ref);
                 },
+                icon: const Icon(Icons.add),
+                label: const Text('追加'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 16,
-                  ),
                 ),
-                child: const Text('追加'),
               ),
             ],
           ),
-        ),
-        const Divider(),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: shiftData.skills.length,
-            itemBuilder: (context, index) {
-              final skill = shiftData.skills[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: backgroundColor,
-                  border: Border.all(color: borderColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ListTile(
-                  title: Text(skill),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete),
-                    color: Colors.red,
-                    onPressed: () {
-                      _showDeleteConfirmDialog(context, ref, skill);
+          const SizedBox(height: 24),
+          // スキルリスト
+          Expanded(
+            child: shiftData.skills.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.work_outline,
+                          size: 80,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'スキルが登録されていません',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '右上の「追加」ボタンからスキルを登録してください',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: shiftData.skills.length,
+                    itemBuilder: (context, index) {
+                      final skill = shiftData.skills[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          border: Border.all(color: borderColor),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: primaryColor.withOpacity(0.1),
+                            child: Icon(Icons.work, color: primaryColor),
+                          ),
+                          title: Text(
+                            skill,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete,
+                                size: 20, color: Colors.red),
+                            onPressed: () {
+                              _showDeleteConfirmDialog(context, ref, skill);
+                            },
+                            tooltip: '削除',
+                          ),
+                        ),
+                      );
                     },
                   ),
-                ),
-              );
-            },
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  void _showDeleteConfirmDialog(BuildContext context, WidgetRef ref, String skill) {
+  void _showAddSkillDialog(BuildContext context, WidgetRef ref) {
+    final skillController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('削除確認'),
-        content: Text('スキル「$skill」を削除しますか？\n\nこのスキルを持つスタッフから削除されます。'),
+        title: const Text('スキルを追加'),
+        content: TextField(
+          controller: skillController,
+          decoration: const InputDecoration(
+            labelText: 'スキル名',
+            hintText: '例: ホール、キッチン',
+          ),
+          autofocus: true,
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('キャンセル'),
           ),
+          ElevatedButton(
+            onPressed: () {
+              final skill = skillController.text.trim();
+              if (skill.isNotEmpty) {
+                ref.read(shiftDataProvider.notifier).addSkill(skill);
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('「$skill」を追加しました')),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('追加'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(
+      BuildContext context, WidgetRef ref, String skill) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('削除の確認'),
+        content: Text(
+            '「$skill」を削除してもよろしいですか？\n\nこのスキルを持つスタッフやシフトデータからも削除されます。'),
+        actions: [
           TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
             onPressed: () {
               ref.read(shiftDataProvider.notifier).removeSkill(skill);
               Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('「$skill」を削除しました')),
+              );
             },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('削除'),
           ),
         ],
       ),

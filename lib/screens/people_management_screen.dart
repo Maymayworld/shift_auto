@@ -1,7 +1,6 @@
 // screens/people_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import '../providers/shift_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../models/shift_data.dart';
@@ -14,12 +13,13 @@ class PeopleManagementScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final shiftData = ref.watch(shiftDataProvider);
 
-    return Column(
-      children: [
-        // 戻るボタンとタイトル
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ヘッダー
+          Row(
             children: [
               IconButton(
                 icon: Icon(Icons.arrow_back, color: primaryColor),
@@ -38,7 +38,7 @@ class PeopleManagementScreen extends HookConsumerWidget {
               const Spacer(),
               ElevatedButton.icon(
                 onPressed: () {
-                  _showPersonDialog(context, ref);
+                  _showAddPersonDialog(context, ref);
                 },
                 icon: const Icon(Icons.add),
                 label: const Text('追加'),
@@ -49,175 +49,320 @@ class PeopleManagementScreen extends HookConsumerWidget {
               ),
             ],
           ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: shiftData.people.length,
-            itemBuilder: (context, index) {
-              final person = shiftData.people[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: backgroundColor,
-                  border: Border.all(color: borderColor),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: ListTile(
-                  title: Text(person.name),
-                  subtitle: Text('スキル: ${person.skills.join(', ')}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          _showPersonDialog(context, ref, person: person);
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        color: Colors.red,
-                        onPressed: () {
-                          _showDeleteConfirmDialog(context, ref, person);
-                        },
-                      ),
-                    ],
+          const SizedBox(height: 24),
+          // スタッフリスト
+          Expanded(
+            child: shiftData.people.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.people_outline,
+                          size: 80,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'スタッフが登録されていません',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '右上の「追加」ボタンからスタッフを登録してください',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: shiftData.people.length,
+                    itemBuilder: (context, index) {
+                      final person = shiftData.people[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          border: Border.all(color: borderColor),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: primaryColor.withOpacity(0.1),
+                            child: Icon(Icons.person, color: primaryColor),
+                          ),
+                          title: Text(
+                            person.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'スキル: ${person.skills.isEmpty ? "未設定" : person.skills.join(', ')}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 20),
+                                onPressed: () {
+                                  _showEditPersonDialog(context, ref, person);
+                                },
+                                tooltip: '編集',
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete,
+                                    size: 20, color: Colors.red),
+                                onPressed: () {
+                                  _showDeleteConfirmDialog(
+                                      context, ref, person);
+                                },
+                                tooltip: '削除',
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showPersonDialog(BuildContext context, WidgetRef ref, {Person? person}) {
-    showDialog(
-      context: context,
-      builder: (context) => _PersonDialog(person: person),
-    );
-  }
-
-  void _showDeleteConfirmDialog(BuildContext context, WidgetRef ref, Person person) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('削除確認'),
-        content: Text('${person.name}を削除しますか？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(shiftDataProvider.notifier).removePerson(person.id);
-              Navigator.pop(context);
-            },
-            child: const Text('削除', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
-}
 
-class _PersonDialog extends HookConsumerWidget {
-  final Person? person;
+  void _showAddPersonDialog(BuildContext context, WidgetRef ref) {
+    final nameController = TextEditingController();
+    final shiftData = ref.read(shiftDataProvider);
+    final selectedSkills = <String>{};
 
-  const _PersonDialog({this.person});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final shiftData = ref.watch(shiftDataProvider);
-    final nameController = useTextEditingController(text: person?.name ?? '');
-    final selectedSkills = useState<Set<String>>(
-      person?.skills.toSet() ?? {},
-    );
-
-    return AlertDialog(
-      title: Text(person == null ? 'スタッフ追加' : 'スタッフ編集'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: '名前',
-                border: OutlineInputBorder(),
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('スタッフを追加'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: '名前',
+                    hintText: '例: 山田太郎',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'スキル',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (shiftData.skills.isEmpty)
+                  Text(
+                    '先にスキルを登録してください',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    children: shiftData.skills.map((skill) {
+                      final isSelected = selectedSkills.contains(skill);
+                      return FilterChip(
+                        label: Text(skill),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              selectedSkills.add(skill);
+                            } else {
+                              selectedSkills.remove(skill);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  final person = Person(
+                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    name: name,
+                    skills: selectedSkills.toList(),
+                  );
+                  ref.read(shiftDataProvider.notifier).addPerson(person);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('「$name」を追加しました')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
               ),
+              child: const Text('追加'),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'スキル選択',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            ...shiftData.skills.map((skill) {
-              final isSelected = selectedSkills.value.contains(skill);
-              return CheckboxListTile(
-                title: Text(skill),
-                value: isSelected,
-                onChanged: (value) {
-                  final newSet = Set<String>.from(selectedSkills.value);
-                  if (value == true) {
-                    newSet.add(skill);
-                  } else {
-                    newSet.remove(skill);
-                  }
-                  selectedSkills.value = newSet;
-                },
-              );
-            }),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (nameController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('名前を入力してください')),
-              );
-              return;
-            }
+    );
+  }
 
-            if (selectedSkills.value.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('少なくとも1つのスキルを選択してください')),
-              );
-              return;
-            }
+  void _showEditPersonDialog(
+      BuildContext context, WidgetRef ref, Person person) {
+    final nameController = TextEditingController(text: person.name);
+    final shiftData = ref.read(shiftDataProvider);
+    final selectedSkills = Set<String>.from(person.skills);
 
-            final newPerson = Person(
-              id: person?.id ?? 'id${DateTime.now().millisecondsSinceEpoch}',
-              name: nameController.text,
-              skills: selectedSkills.value.toList(),
-            );
-
-            if (person == null) {
-              ref.read(shiftDataProvider.notifier).addPerson(newPerson);
-            } else {
-              ref.read(shiftDataProvider.notifier).updatePerson(newPerson);
-            }
-
-            Navigator.pop(context);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryColor,
-            foregroundColor: Colors.white,
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('スタッフを編集'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: '名前',
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'スキル',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (shiftData.skills.isEmpty)
+                  Text(
+                    '先にスキルを登録してください',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    children: shiftData.skills.map((skill) {
+                      final isSelected = selectedSkills.contains(skill);
+                      return FilterChip(
+                        label: Text(skill),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              selectedSkills.add(skill);
+                            } else {
+                              selectedSkills.remove(skill);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
           ),
-          child: const Text('保存'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  ref.read(shiftDataProvider.notifier).updatePerson(
+                        person.copyWith(
+                          name: name,
+                          skills: selectedSkills.toList(),
+                        ),
+                      );
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('更新しました')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('更新'),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(
+      BuildContext context, WidgetRef ref, Person person) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('削除の確認'),
+        content: Text(
+            '「${person.name}」を削除してもよろしいですか？\n\nこのスタッフに関連するシフトデータも削除されます。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(shiftDataProvider.notifier).removePerson(person.id);
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('「${person.name}」を削除しました')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('削除'),
+          ),
+        ],
+      ),
     );
   }
 }
