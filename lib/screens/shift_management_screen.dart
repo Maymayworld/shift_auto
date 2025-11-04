@@ -83,14 +83,14 @@ class ShiftManagementScreen extends HookConsumerWidget {
                             selectedShifts.value = {};
                             isSelectionMode.value = false;
                           } else {
-                            // 全てのシフトを計算
+                            // 全てのシフトを計算（60日 × 2シフト = 120シフト）
                             final allShiftIds = <String>[];
                             for (int i = 0; i < 60; i++) {
                               final date = DateTime.now().add(Duration(days: i));
-                              final isEarlyShift = i % 2 == 0;
-                              final shiftId =
-                                  '${date.year}-${date.month}-${date.day}-${isEarlyShift ? 'early' : 'late'}';
-                              allShiftIds.add(shiftId);
+                              // 早番
+                              allShiftIds.add('${date.year}-${date.month}-${date.day}-early');
+                              // 遅番
+                              allShiftIds.add('${date.year}-${date.month}-${date.day}-late');
                             }
                             await ref
                                 .read(shiftDataProvider.notifier)
@@ -129,14 +129,17 @@ class ShiftManagementScreen extends HookConsumerWidget {
                 final shiftData = ref.watch(shiftDataProvider);
                 
                 return ListView.builder(
-                  itemCount: 60, // 60日分
+                  itemCount: 120, // 60日 × 2シフト（早番・遅番）
                   itemBuilder: (context, index) {
-                    final date = DateTime.now().add(Duration(days: index));
-                    final isEarlyShift = index % 2 == 0;
-                    final shiftId =
-                        '${date.year}-${date.month}-${date.day}-${isEarlyShift ? 'early' : 'late'}';
-                    final dailyShift = shiftData.getDailyShift(
-                        shiftId, date, isEarlyShift ? '早番' : '遅番');
+                    // index / 2 で日付を計算、index % 2 でシフトタイプを決定
+                    final dayIndex = index ~/ 2; // 整数除算
+                    final isEarlyShift = index % 2 == 0; // 偶数: 早番、奇数: 遅番
+                    
+                    final date = DateTime.now().add(Duration(days: dayIndex));
+                    final shiftType = isEarlyShift ? '早番' : '遅番';
+                    final shiftId = '${date.year}-${date.month}-${date.day}-${isEarlyShift ? 'early' : 'late'}';
+                    
+                    final dailyShift = shiftData.getDailyShift(shiftId, date, shiftType);
 
                     // フィルタリング
                     if (filterIndex.value == 1 && dailyShift.isCalculated) {
@@ -229,7 +232,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
               )
             : InkWell(
                 onTap: () {
-                  // Navigator.pushの代わりにナビゲーションプロバイダーを使用
+                  // ナビゲーションプロバイダーを使用
                   ref.read(navigationProvider.notifier).navigateTo(
                         ScreenType.shiftEdit,
                         params: {
