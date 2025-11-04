@@ -18,7 +18,7 @@ class ShiftAutoAlgorithm {
       var personSkills = List<String>.from(peopleMap[personId]!);
 
       // スキル指定がある場合は、そのスキルのみに絞る
-      if (wantSkill != 'SA') {
+      if (wantSkill != 'スキル指定なし') {
         if (personSkills.contains(wantSkill)) {
           personSkills = [wantSkill];
         } else {
@@ -35,8 +35,7 @@ class ShiftAutoAlgorithm {
         players[personId] = personSkills;
       }
     }
-    // 問題なし
-    print('Created players: $players');
+    
     return players;
   }
 
@@ -106,7 +105,6 @@ class ShiftAutoAlgorithm {
 
     generatePatternsRecursive(initialPattern, playerIds, initialCounts);
 
-    print('Created patterns_v1 count: ${patterns.length}');
     return patterns;
   }
 
@@ -268,7 +266,7 @@ class ShiftAutoAlgorithm {
   }) {
     final fixedMap = Map<String, int>.from(requiredMap);
 
-    // 固定カスタマーの分を引く
+    // 固定スタッフの分を引く
     for (final skill in constCustomer.values) {
       if (fixedMap.containsKey(skill)) {
         fixedMap[skill] = fixedMap[skill]! - 1;
@@ -341,6 +339,9 @@ class ShiftAutoAlgorithm {
       resultMap: resultMap,
       sorryScores: sorryScores,
     );
+
+    // 不公平スコアを出力
+    print('不公平スコア: $newSorryScores');
 
     final elapsedTime = DateTime.now().difference(startTime);
 
