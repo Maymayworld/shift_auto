@@ -295,8 +295,22 @@ class ShiftManagementScreen extends HookConsumerWidget {
       );
     }
 
-    // 結果を表示
-    final resultMap = dailyShift.resultMap!;
+    // 結果を表示（固定スタッフも含める）
+    final resultMap = Map<String, List<String>>.from(dailyShift.resultMap!);
+    
+    // 固定スタッフを結果に追加
+    for (final entry in dailyShift.constStaff.entries) {
+      final personId = entry.key;
+      final skill = entry.value;
+      
+      if (!resultMap.containsKey(skill)) {
+        resultMap[skill] = [];
+      }
+      if (!resultMap[skill]!.contains(personId)) {
+        resultMap[skill]!.add(personId);
+      }
+    }
+    
     final resultText = <String>[];
 
     for (final entry in resultMap.entries) {

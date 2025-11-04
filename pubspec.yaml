@@ -9,6 +9,8 @@ dependencies:
   flutter:
     sdk: flutter
   
+  google_fonts: ^6.0.0
+  
   # 状態管理
   flutter_hooks: ^0.21.0
   hooks_riverpod: ^2.4.9

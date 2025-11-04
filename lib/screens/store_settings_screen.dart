@@ -19,6 +19,56 @@ class StoreSettingsScreen extends HookConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // スキルパターンセクション
+            Row(
+              children: [
+                Text(
+                  'スキルパターン',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    ref
+                        .read(navigationProvider.notifier)
+                        .navigateTo(ScreenType.skillManagement);
+                  },
+                  icon: const Icon(Icons.edit),
+                  label: const Text('編集'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: shiftData.skills.isEmpty
+                  ? const Text('スキルが登録されていません')
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: shiftData.skills.map((skill) {
+                        return Chip(
+                          label: Text(skill),
+                          backgroundColor: primaryColor.withOpacity(0.1),
+                        );
+                      }).toList(),
+                    ),
+            ),
+            const SizedBox(height: 40),
+
             // シフトパターンセクション
             Row(
               children: [
@@ -198,56 +248,6 @@ class StoreSettingsScreen extends HookConsumerWidget {
                               ),
                             ],
                           ),
-                        );
-                      }).toList(),
-                    ),
-            ),
-            const SizedBox(height: 40),
-
-            // スキル情報セクション
-            Row(
-              children: [
-                Text(
-                  'スキル情報',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-                const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    ref
-                        .read(navigationProvider.notifier)
-                        .navigateTo(ScreenType.skillManagement);
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: const Text('編集'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: shiftData.skills.isEmpty
-                  ? const Text('スキルが登録されていません')
-                  : Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: shiftData.skills.map((skill) {
-                        return Chip(
-                          label: Text(skill),
-                          backgroundColor: primaryColor.withOpacity(0.1),
                         );
                       }).toList(),
                     ),

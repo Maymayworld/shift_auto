@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_layout.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   runApp(
@@ -21,6 +22,7 @@ class MyApp extends StatelessWidget {
       title: 'ShiftAuto',
       theme: ThemeData(
         primaryColor: primaryColor,
+        textTheme: GoogleFonts.zenKakuGothicNewTextTheme(),
         colorScheme: ColorScheme.fromSeed(seedColor: primaryColor),
         useMaterial3: true,
       ),
