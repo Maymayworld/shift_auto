@@ -229,10 +229,54 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     _saveData();
   }
 
+  /// 特定の日付のシフトを取得または作成
+  DailyShift _getOrCreateDailyShift(String shiftId, DateTime date, String shiftType) {
+    if (state.dailyShifts.containsKey(shiftId)) {
+      return state.dailyShifts[shiftId]!;
+    }
+    
+    // 存在しない場合は新規作成
+    Map<String, int> defaultRequired = {};
+    try {
+      final parts = shiftId.split('-');
+      if (parts.length >= 4) {
+        final patternId = parts.sublist(3).join('-');
+        final pattern = state.shiftPatterns.firstWhere(
+          (p) => p.id == patternId,
+          orElse: () => state.shiftPatterns.first,
+        );
+        defaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
+      }
+    } catch (e) {
+      defaultRequired = {};
+    }
+    
+    return DailyShift(
+      shiftId: shiftId,
+      date: date,
+      shiftType: shiftType,
+      wantsMap: {},
+      requiredMap: defaultRequired,
+      constStaff: {},
+    );
+  }
+
   /// 特定の日付のシフトに希望を設定
   void setDailyWant(String shiftId, String personId, String skill) {
-    final shift = state.dailyShifts[shiftId];
-    if (shift == null) return;
+    // shiftIdから日付とシフトタイプを取得
+    final parts = shiftId.split('-');
+    final date = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+    final patternId = parts.sublist(3).join('-');
+    final pattern = state.shiftPatterns.firstWhere(
+      (p) => p.id == patternId,
+      orElse: () => state.shiftPatterns.first,
+    );
+    
+    final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
     
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap[personId] = skill;
@@ -253,19 +297,47 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
 
   /// 特定の日付のシフトの必要人数を設定
   void setDailyRequired(String shiftId, String skill, int count) {
-    final shift = state.dailyShifts[shiftId];
-    if (shift == null) return;
+    // shiftIdから日付とシフトタイプを取得
+    final parts = shiftId.split('-');
+    final date = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+    final patternId = parts.sublist(3).join('-');
+    final pattern = state.shiftPatterns.firstWhere(
+      (p) => p.id == patternId,
+      orElse: () => state.shiftPatterns.first,
+    );
+    
+    final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
     
     final newRequiredMap = Map<String, int>.from(shift.requiredMap);
-    newRequiredMap[skill] = count;
+    if (count > 0) {
+      newRequiredMap[skill] = count;
+    } else {
+      newRequiredMap.remove(skill);
+    }
     
     updateDailyShift(shift.copyWith(requiredMap: newRequiredMap));
   }
 
   /// 特定の日付のシフトに固定スタッフを設定
   void setDailyConstStaff(String shiftId, String personId, String skill) {
-    final shift = state.dailyShifts[shiftId];
-    if (shift == null) return;
+    // shiftIdから日付とシフトタイプを取得
+    final parts = shiftId.split('-');
+    final date = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+    final patternId = parts.sublist(3).join('-');
+    final pattern = state.shiftPatterns.firstWhere(
+      (p) => p.id == patternId,
+      orElse: () => state.shiftPatterns.first,
+    );
+    
+    final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
     
     final newConstStaff = Map<String, String>.from(shift.constStaff);
     newConstStaff[personId] = skill;
@@ -292,8 +364,20 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
 
   /// シフトを計算
   Future<void> calculateShift(String shiftId) async {
-    final shift = state.dailyShifts[shiftId];
-    if (shift == null) return;
+    // shiftIdから日付とシフトタイプを取得
+    final parts = shiftId.split('-');
+    final date = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+    final patternId = parts.sublist(3).join('-');
+    final pattern = state.shiftPatterns.firstWhere(
+      (p) => p.id == patternId,
+      orElse: () => state.shiftPatterns.first,
+    );
+    
+    final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
 
     // peopleMapを作成
     final peopleMap = <String, List<String>>{};
@@ -337,6 +421,75 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   /// 不公平スコアを更新
   void updateSorryScores(Map<String, int> newScores) {
     state = state.copyWith(sorryScores: newScores);
+    _saveData();
+  }
+
+  /// 特定の人のシフトをクリア（希望・固定・計算結果を削除）
+  void clearPersonShift(String shiftId, String personId) {
+    // shiftIdから日付とシフトタイプを取得
+    final parts = shiftId.split('-');
+    final date = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+    final patternId = parts.sublist(3).join('-');
+    final pattern = state.shiftPatterns.firstWhere(
+      (p) => p.id == patternId,
+      orElse: () => state.shiftPatterns.first,
+    );
+    
+    final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
+    
+    // 希望を削除
+    final newWantsMap = Map<String, String>.from(shift.wantsMap);
+    newWantsMap.remove(personId);
+    
+    // 固定を削除
+    final newConstStaff = Map<String, String>.from(shift.constStaff);
+    newConstStaff.remove(personId);
+    
+    // 計算結果からも削除
+    Map<String, List<String>>? newResultMap;
+    if (shift.resultMap != null) {
+      newResultMap = {};
+      for (final entry in shift.resultMap!.entries) {
+        newResultMap[entry.key] = entry.value.where((id) => id != personId).toList();
+      }
+    }
+    
+    updateDailyShift(shift.copyWith(
+      wantsMap: newWantsMap,
+      constStaff: newConstStaff,
+      resultMap: newResultMap,
+    ));
+  }
+
+  /// 特定の日付のシフトをクリア（全員の希望・固定・計算結果を削除）
+  void clearDailyShift(String shiftId) {
+    final shift = state.dailyShifts[shiftId];
+    if (shift == null) return;
+    
+    updateDailyShift(shift.copyWith(
+      wantsMap: {},
+      constStaff: {},
+      resultMap: null,
+      isCalculated: false,
+    ));
+  }
+
+  /// 全てのシフトをクリア
+  void clearAllShifts() {
+    final newDailyShifts = <String, DailyShift>{};
+    for (final entry in state.dailyShifts.entries) {
+      newDailyShifts[entry.key] = entry.value.copyWith(
+        wantsMap: {},
+        constStaff: {},
+        resultMap: null,
+        isCalculated: false,
+      );
+    }
+    state = state.copyWith(dailyShifts: newDailyShifts);
     _saveData();
   }
 
