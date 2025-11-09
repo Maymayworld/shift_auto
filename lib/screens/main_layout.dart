@@ -7,7 +7,6 @@ import 'dashboard_screen.dart';
 import 'shift_management_screen.dart';
 import 'shift_edit_screen.dart';
 import 'store_settings_screen.dart';
-import 'skill_management_screen.dart';
 import 'people_management_screen.dart';
 import 'help_screen.dart';
 
@@ -86,8 +85,7 @@ class MainLayout extends HookConsumerWidget {
                       _buildMenuItem(
                         icon: Icons.settings,
                         label: '店舗情報',
-                        isSelected: navigationState.screenType == ScreenType.storeSettings ||
-                            navigationState.screenType == ScreenType.skillManagement,
+                        isSelected: navigationState.screenType == ScreenType.storeSettings,
                         onTap: () => ref
                             .read(navigationProvider.notifier)
                             .navigateTo(ScreenType.storeSettings),
@@ -132,12 +130,13 @@ class MainLayout extends HookConsumerWidget {
         );
       case ScreenType.storeSettings:
         return const StoreSettingsScreen();
-      case ScreenType.skillManagement:
-        return const SkillManagementScreen();
       case ScreenType.peopleManagement:
         return const PeopleManagementScreen();
       case ScreenType.help:
         return const HelpScreen();
+      // skillManagementは削除（storeSettingsに統合）
+      case ScreenType.skillManagement:
+        return const StoreSettingsScreen();
     }
   }
 

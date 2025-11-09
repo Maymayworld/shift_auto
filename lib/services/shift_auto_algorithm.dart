@@ -1,4 +1,6 @@
 // services/shift_auto_algorithm.dart
+import '../models/shift_data.dart';
+
 /// シフトオート - コアアルゴリズム
 class ShiftAutoAlgorithm {
   /// 1. playersの作成
@@ -132,15 +134,43 @@ class ShiftAutoAlgorithm {
         .toList();
   }
 
-  /// 4. patterns_v3の作成 - 先頭から順に空か否かを確認
-  static List<Map<String, List<String>>> createPatternsV3({
-    required List<Map<String, List<String>>> patternsV2,
-    required Map<String, int> fixedRequiredMap,
-  }) {
+  /// 3.5. patterns_v2_5の作成 - リスト長さ総和が最大のものを選ぶ（新規追加）
+  static List<Map<String, List<String>>> createPatternsV2_5(
+    List<Map<String, List<String>>> patternsV2,
+  ) {
     if (patternsV2.length <= 1) return patternsV2;
 
+    // 各パターンのリスト長さ総和を計算
+    int maxTotalLength = 0;
+    for (final pattern in patternsV2) {
+      int totalLength = 0;
+      for (final list in pattern.values) {
+        totalLength += list.length;
+      }
+      if (totalLength > maxTotalLength) {
+        maxTotalLength = totalLength;
+      }
+    }
+
+    // 最大総和のものを選択
+    return patternsV2.where((pattern) {
+      int totalLength = 0;
+      for (final list in pattern.values) {
+        totalLength += list.length;
+      }
+      return totalLength == maxTotalLength;
+    }).toList();
+  }
+
+  /// 4. patterns_v3の作成 - 先頭から順に空か否かを確認
+  static List<Map<String, List<String>>> createPatternsV3({
+    required List<Map<String, List<String>>> patternsV2_5,
+    required Map<String, int> fixedRequiredMap,
+  }) {
+    if (patternsV2_5.length <= 1) return patternsV2_5;
+
     final skillsOrder = fixedRequiredMap.keys.toList();
-    var remaining = List<Map<String, List<String>>>.from(patternsV2);
+    var remaining = List<Map<String, List<String>>>.from(patternsV2_5);
 
     for (final skill in skillsOrder) {
       if (remaining.length <= 1) break;
@@ -158,16 +188,80 @@ class ShiftAutoAlgorithm {
     return remaining;
   }
 
-  /// 5. patterns_v4の作成 - 不公平スコアの解消度が高い順に並べる
-  static List<Map<String, List<String>>> createPatternsV4({
+  /// 4.5. patterns_v3_5の作成 - 希望叶え率の総和が低いものを選ぶ（新規追加）
+  static List<Map<String, List<String>>> createPatternsV3_5({
     required List<Map<String, List<String>>> patternsV3,
-    required Map<String, int> sorryScores,
+    required Map<String, DailyShift> allDailyShifts,
   }) {
     if (patternsV3.length <= 1) return patternsV3;
 
+    // 各人の総シフト希望数を計算
+    final totalWantsCount = <String, int>{};
+    final currentAssignedCount = <String, int>{};
+
+    for (final dailyShift in allDailyShifts.values) {
+      // 希望数をカウント
+      for (final personId in dailyShift.wantsMap.keys) {
+        totalWantsCount[personId] = (totalWantsCount[personId] ?? 0) + 1;
+      }
+
+      // 既に配属済みの数をカウント（固定 + 計算結果）
+      for (final personId in dailyShift.constStaff.keys) {
+        currentAssignedCount[personId] = (currentAssignedCount[personId] ?? 0) + 1;
+      }
+      if (dailyShift.resultMap != null) {
+        for (final personIds in dailyShift.resultMap!.values) {
+          for (final personId in personIds) {
+            currentAssignedCount[personId] = (currentAssignedCount[personId] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    // 各パターンの希望叶え率総和を計算
+    final patternFulfillmentRates = <_PatternFulfillmentRate>[];
+    
+    for (final pattern in patternsV3) {
+      double totalRate = 0.0;
+      
+      // 希望を出した全員について希望叶え率を計算
+      for (final personId in totalWantsCount.keys) {
+        final total = totalWantsCount[personId] ?? 0;
+        if (total == 0) continue;
+        
+        // 現在の配属数（このパターンでの配置は考慮しない）
+        final assigned = currentAssignedCount[personId] ?? 0;
+        
+        // 希望叶え率 = (配属数+1) / (総希望数+1)
+        // +1することで、未配属でも希望数による差をつける
+        final rate = (assigned + 1) / (total + 1);
+        totalRate += rate;
+      }
+      
+      patternFulfillmentRates.add(_PatternFulfillmentRate(pattern, totalRate));
+    }
+
+    // 希望叶え率の総和が低い順にソート
+    patternFulfillmentRates.sort((a, b) => a.rate.compareTo(b.rate));
+
+    // 最小の希望叶え率のものだけを選択
+    final minRate = patternFulfillmentRates.first.rate;
+    return patternFulfillmentRates
+        .where((pr) => pr.rate == minRate)
+        .map((pr) => pr.pattern)
+        .toList();
+  }
+
+  /// 5. patterns_v4の作成 - 不公平スコアの解消度が高い順に並べる
+  static List<Map<String, List<String>>> createPatternsV4({
+    required List<Map<String, List<String>>> patternsV3_5,
+    required Map<String, int> sorryScores,
+  }) {
+    if (patternsV3_5.length <= 1) return patternsV3_5;
+
     // 各パターンの不公平スコア合計を計算
     final patternScores = <_PatternScore>[];
-    for (final pattern in patternsV3) {
+    for (final pattern in patternsV3_5) {
       int totalScore = 0;
       for (final personIds in pattern.values) {
         for (final personId in personIds) {
@@ -273,6 +367,9 @@ class ShiftAutoAlgorithm {
       }
     }
 
+    // 負の値を0にクランプ
+    fixedMap.updateAll((key, value) => value < 0 ? 0 : value);
+
     // 人数の多い順にソート
     final sortedEntries = fixedMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -287,6 +384,7 @@ class ShiftAutoAlgorithm {
     required Map<String, int> requiredMap,
     required Map<String, String> constCustomer,
     required Map<String, int> sorryScores,
+    required Map<String, DailyShift> allDailyShifts, // 新規パラメータ
   }) {
     final startTime = DateTime.now();
 
@@ -312,15 +410,24 @@ class ShiftAutoAlgorithm {
     // 3. patterns_v2の作成
     final patternsV2 = createPatternsV2(patternsV1);
 
+    // 3.5. patterns_v2_5の作成（新規）
+    final patternsV2_5 = createPatternsV2_5(patternsV2);
+
     // 4. patterns_v3の作成
     final patternsV3 = createPatternsV3(
-      patternsV2: patternsV2,
+      patternsV2_5: patternsV2_5,
       fixedRequiredMap: fixedRequiredMap,
+    );
+
+    // 4.5. patterns_v3_5の作成（新規）
+    final patternsV3_5 = createPatternsV3_5(
+      patternsV3: patternsV3,
+      allDailyShifts: allDailyShifts,
     );
 
     // 5. patterns_v4の作成
     final patternsV4 = createPatternsV4(
-      patternsV3: patternsV3,
+      patternsV3_5: patternsV3_5,
       sorryScores: sorryScores,
     );
 
@@ -340,9 +447,6 @@ class ShiftAutoAlgorithm {
       sorryScores: sorryScores,
     );
 
-    // 不公平スコアを出力
-    print('不公平スコア: $newSorryScores');
-
     final elapsedTime = DateTime.now().difference(startTime);
 
     return ShiftAutoResult(
@@ -351,7 +455,9 @@ class ShiftAutoAlgorithm {
       players: players,
       patternsV1Count: patternsV1.length,
       patternsV2Count: patternsV2.length,
+      patternsV2_5Count: patternsV2_5.length,
       patternsV3Count: patternsV3.length,
+      patternsV3_5Count: patternsV3_5.length,
       patternsV4Count: patternsV4.length,
       patternsV5Count: patternsV5.length,
       elapsedTime: elapsedTime,
@@ -367,6 +473,14 @@ class _PatternScore {
   _PatternScore(this.pattern, this.score);
 }
 
+/// パターンと希望叶え率のペア
+class _PatternFulfillmentRate {
+  final Map<String, List<String>> pattern;
+  final double rate;
+
+  _PatternFulfillmentRate(this.pattern, this.rate);
+}
+
 /// アルゴリズム実行結果
 class ShiftAutoResult {
   final Map<String, List<String>> resultMap;
@@ -374,7 +488,9 @@ class ShiftAutoResult {
   final Map<String, List<String>> players;
   final int patternsV1Count;
   final int patternsV2Count;
+  final int patternsV2_5Count;
   final int patternsV3Count;
+  final int patternsV3_5Count;
   final int patternsV4Count;
   final int patternsV5Count;
   final Duration elapsedTime;
@@ -385,7 +501,9 @@ class ShiftAutoResult {
     required this.players,
     required this.patternsV1Count,
     required this.patternsV2Count,
+    required this.patternsV2_5Count,
     required this.patternsV3Count,
+    required this.patternsV3_5Count,
     required this.patternsV4Count,
     required this.patternsV5Count,
     required this.elapsedTime,

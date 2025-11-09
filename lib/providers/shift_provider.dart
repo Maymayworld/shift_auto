@@ -391,13 +391,14 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       filteredWantsMap.remove(personId);
     }
 
-    // アルゴリズム実行
+    // アルゴリズム実行（allDailyShiftsを渡す）
     final result = ShiftAutoAlgorithm.run(
       peopleMap: peopleMap,
       wantsMap: filteredWantsMap,
       requiredMap: shift.requiredMap,
       constCustomer: shift.constStaff,
       sorryScores: state.sorryScores,
+      allDailyShifts: state.dailyShifts, // 全シフト情報を渡す
     );
 
     // 結果を保存

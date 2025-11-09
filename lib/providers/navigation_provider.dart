@@ -7,7 +7,7 @@ enum ScreenType {
   shiftManagement,
   shiftEdit,
   storeSettings,
-  skillManagement,
+  skillManagement, // 互換性のため残すが、storeSettingsに転送
   peopleManagement,
   help,
 }
@@ -40,10 +40,18 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
 
   /// 画面を変更
   void navigateTo(ScreenType screenType, {Map<String, dynamic>? params}) {
-    state = NavigationState(
-      screenType: screenType,
-      params: params ?? {},
-    );
+    // skillManagementはstoreSettingsにリダイレクト
+    if (screenType == ScreenType.skillManagement) {
+      state = NavigationState(
+        screenType: ScreenType.storeSettings,
+        params: params ?? {},
+      );
+    } else {
+      state = NavigationState(
+        screenType: screenType,
+        params: params ?? {},
+      );
+    }
   }
 
   /// 戻る（前の画面に戻る）
@@ -54,7 +62,8 @@ class NavigationNotifier extends StateNotifier<NavigationState> {
         navigateTo(ScreenType.shiftManagement);
         break;
       case ScreenType.skillManagement:
-        navigateTo(ScreenType.storeSettings);
+      case ScreenType.storeSettings:
+        navigateTo(ScreenType.dashboard);
         break;
       case ScreenType.peopleManagement:
         navigateTo(ScreenType.dashboard);
