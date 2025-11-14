@@ -5,7 +5,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import '../theme/app_theme.dart';
 import '../models/shift_data.dart';
 import '../providers/shift_provider.dart';
-import '../providers/navigation_provider.dart';
 
 class ShiftManagementScreen extends HookConsumerWidget {
   const ShiftManagementScreen({Key? key}) : super(key: key);
@@ -20,18 +19,10 @@ class ShiftManagementScreen extends HookConsumerWidget {
     // 選択されたシフトIDを管理
     final selectedShifts = useState<Map<String, bool>>({});
 
-    // 日付とシフトパターンの組み合わせを生成（30日分）
-    final datePatternPairs = <Map<String, dynamic>>[];
+    // 30日分の日付を生成
+    final dates = <DateTime>[];
     for (int i = 0; i < 30; i++) {
-      final date = DateTime.now().add(Duration(days: i));
-      for (final pattern in shiftData.shiftPatterns) {
-        final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
-        datePatternPairs.add({
-          'date': date,
-          'pattern': pattern,
-          'shiftId': shiftId,
-        });
-      }
+      dates.add(DateTime.now().add(Duration(days: i)));
     }
 
     return Padding(
@@ -69,10 +60,8 @@ class ShiftManagementScreen extends HookConsumerWidget {
                     ? null
                     : () {
                         if (!isSelectionMode.value) {
-                          // 選択モードに切り替え
                           isSelectionMode.value = true;
                         } else {
-                          // 選択されたシフトを計算
                           final selected = selectedShifts.value.entries
                               .where((entry) => entry.value == true)
                               .map((entry) => entry.key)
@@ -99,7 +88,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
                                   content: Text('${selected.length}件のシフトを計算しました'),
                                 ),
                               );
-                              // 選択モードを解除
                               isSelectionMode.value = false;
                               selectedShifts.value = {};
                             } finally {
@@ -135,9 +123,13 @@ class ShiftManagementScreen extends HookConsumerWidget {
                         isCalculating.value = true;
                         try {
                           // 全てのシフトを計算
-                          final allShiftIds = datePatternPairs
-                              .map((pair) => pair['shiftId'] as String)
-                              .toList();
+                          final allShiftIds = <String>[];
+                          for (final date in dates) {
+                            for (final pattern in shiftData.shiftPatterns) {
+                              final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+                              allShiftIds.add(shiftId);
+                            }
+                          }
                           
                           await ref
                               .read(shiftDataProvider.notifier)
@@ -219,7 +211,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                   context,
                   ref,
                   shiftData,
-                  datePatternPairs,
+                  dates,
                   isSelectionMode,
                   selectedShifts,
                 ),
@@ -235,19 +227,18 @@ class ShiftManagementScreen extends HookConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     ShiftData shiftData,
-    List<Map<String, dynamic>> datePatternPairs,
+    List<DateTime> dates,
     ValueNotifier<bool> isSelectionMode,
     ValueNotifier<Map<String, bool>> selectedShifts,
   ) {
-    const cellWidth = 120.0;
-    const cellHeight = 80.0;
-    const headerHeight = 140.0; // 高さを増やして対応
+    const cellWidth = 180.0;
+    const headerHeight = 120.0;
 
     return Table(
       border: TableBorder.all(color: borderColor, width: 1),
       defaultColumnWidth: const FixedColumnWidth(cellWidth),
       children: [
-        // ヘッダー行: 日付とシフトパターン
+        // ヘッダー行: 日付
         TableRow(
           decoration: BoxDecoration(color: primaryColor.withOpacity(0.1)),
           children: [
@@ -265,43 +256,47 @@ class ShiftManagementScreen extends HookConsumerWidget {
                 ),
               ),
             ),
-            // 各日付・パターンのヘッダー
-            ...datePatternPairs.map((pair) {
-              final date = pair['date'] as DateTime;
-              final pattern = pair['pattern'] as ShiftPattern;
-              final shiftId = pair['shiftId'] as String;
-              final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
-
+            // 各日付のヘッダー
+            ...dates.map((date) {
               return Container(
                 height: headerHeight,
                 padding: const EdgeInsets.all(8),
-                child: Stack(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // メインコンテンツ
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 20), // チェックボックス分のスペース
-                        Text(
-                          '${date.month}/${date.day}(${_getWeekday(date)})',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          pattern.name,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: primaryColor,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // 必要人数（配置済み/必要人数形式）- スクロール可能に
-                        if (dailyShift.requiredMap.isNotEmpty)
-                          Expanded(
-                            child: SingleChildScrollView(
+                    Text(
+                      '${date.month}/${date.day}(${_getWeekday(date)})',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 必要人数の概要を表示（スクロール可能）
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          children: shiftData.shiftPatterns.map((pattern) {
+                            final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+                            final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
+                            
+                            if (dailyShift.requiredMap.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            
+                            // 配置済み人数を計算
+                            final assignedCounts = <String, int>{};
+                            for (final skill in dailyShift.requiredMap.keys) {
+                              int count = 0;
+                              // 固定スタッフ
+                              count += dailyShift.constStaff.values.where((s) => s == skill).length;
+                              // 計算結果配置
+                              count += dailyShift.calculatedStaff.values.where((s) => s == skill).length;
+                              assignedCounts[skill] = count;
+                            }
+                            
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
                               child: Wrap(
                                 spacing: 2,
                                 runSpacing: 2,
@@ -309,20 +304,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                                 children: dailyShift.requiredMap.entries.map((entry) {
                                   final skill = entry.key;
                                   final required = entry.value;
-                                  
-                                  // 配置済み人数を計算
-                                  int assigned = 0;
-                                  
-                                  // 固定スタッフの数
-                                  assigned += dailyShift.constStaff.values
-                                      .where((s) => s == skill)
-                                      .length;
-                                  
-                                  // 計算結果での配置数
-                                  if (dailyShift.resultMap != null && 
-                                      dailyShift.resultMap!.containsKey(skill)) {
-                                    assigned += dailyShift.resultMap![skill]!.length;
-                                  }
+                                  final assigned = assignedCounts[skill] ?? 0;
                                   
                                   return Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -347,58 +329,8 @@ class ShiftManagementScreen extends HookConsumerWidget {
                                   );
                                 }).toList(),
                               ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    // 左上: チェックボックス（選択モードの時のみ表示）
-                    if (isSelectionMode.value)
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        child: InkWell(
-                          onTap: () {
-                            final current = selectedShifts.value[shiftId] ?? false;
-                            selectedShifts.value = {
-                              ...selectedShifts.value,
-                              shiftId: !current,
-                            };
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            child: Icon(
-                              (selectedShifts.value[shiftId] ?? false)
-                                  ? Icons.check_box
-                                  : Icons.check_box_outline_blank,
-                              size: 18,
-                              color: primaryColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    // 右上: ペンアイコン（必要人数編集）
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: InkWell(
-                        onTap: () {
-                          _showRequiredEditDialog(
-                            context,
-                            ref,
-                            shiftId,
-                            date,
-                            pattern,
-                            dailyShift,
-                            shiftData.skills,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Colors.grey[700],
-                          ),
+                            );
+                          }).toList(),
                         ),
                       ),
                     ),
@@ -414,7 +346,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
             children: [
               // スタッフ名セル
               Container(
-                height: cellHeight,
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.grey[50],
@@ -431,46 +362,15 @@ class ShiftManagementScreen extends HookConsumerWidget {
                 ),
               ),
               // 各日付のシフトセル
-              ...datePatternPairs.map((pair) {
-                final date = pair['date'] as DateTime;
-                final pattern = pair['pattern'] as ShiftPattern;
-                final shiftId = pair['shiftId'] as String;
-                final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
-                
-                final currentWant = dailyShift.wantsMap[person.id];
-                final constSkill = dailyShift.constStaff[person.id];
-                final isConst = constSkill != null;
-                final hasWant = currentWant != null;
-                
-                // 配置されたスキルを取得
-                String? assignedSkill;
-                if (dailyShift.resultMap != null) {
-                  for (final entry in dailyShift.resultMap!.entries) {
-                    if (entry.value.contains(person.id)) {
-                      assignedSkill = entry.key;
-                      break;
-                    }
-                  }
-                }
-                
-                // 固定の場合は固定スキル、計算済みの場合は配置されたスキル
-                final isAssigned = isConst || assignedSkill != null;
-
-                return _buildShiftCell(
+              ...dates.map((date) {
+                return _buildDateCell(
                   context: context,
                   ref: ref,
                   person: person,
-                  shiftId: shiftId,
                   date: date,
-                  pattern: pattern,
-                  dailyShift: dailyShift,
-                  hasWant: hasWant,
-                  isConst: isConst,
-                  isAssigned: isAssigned,
-                  currentWant: currentWant,
-                  constSkill: constSkill,
-                  assignedSkill: assignedSkill,
-                  cellHeight: cellHeight,
+                  shiftData: shiftData,
+                  isSelectionMode: isSelectionMode,
+                  selectedShifts: selectedShifts,
                 );
               }),
             ],
@@ -480,211 +380,284 @@ class ShiftManagementScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildShiftCell({
+  Widget _buildDateCell({
     required BuildContext context,
     required WidgetRef ref,
     required Person person,
-    required String shiftId,
     required DateTime date,
-    required ShiftPattern pattern,
-    required DailyShift dailyShift,
-    required bool hasWant,
-    required bool isConst,
-    required bool isAssigned,
-    required String? currentWant,
-    required String? constSkill,
-    required String? assignedSkill,
-    required double cellHeight,
+    required ShiftData shiftData,
+    required ValueNotifier<bool> isSelectionMode,
+    required ValueNotifier<Map<String, bool>> selectedShifts,
   }) {
-    // 左上に表示するスキル（希望スキル）
-    List<String> leftTopSkills = [];
-    if (hasWant && !isConst) {
-      if (currentWant == 'スキル指定なし') {
-        // スキル指定なしの場合は持っている全スキルを表示
-        leftTopSkills = person.skills;
-      } else {
-        // 特定スキルの場合はそのスキルのみ
-        leftTopSkills = [currentWant!];
-      }
+    return Container(
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        children: shiftData.shiftPatterns.map((pattern) {
+          final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+          final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
+          
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _buildShiftTile(
+              context: context,
+              ref: ref,
+              person: person,
+              pattern: pattern,
+              shiftId: shiftId,
+              dailyShift: dailyShift,
+              isSelectionMode: isSelectionMode,
+              selectedShifts: selectedShifts,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildShiftTile({
+    required BuildContext context,
+    required WidgetRef ref,
+    required Person person,
+    required ShiftPattern pattern,
+    required String shiftId,
+    required DailyShift dailyShift,
+    required ValueNotifier<bool> isSelectionMode,
+    required ValueNotifier<Map<String, bool>> selectedShifts,
+  }) {
+    // 状態を判定
+    final isConst = dailyShift.constStaff.containsKey(person.id);
+    final isCalculated = dailyShift.calculatedStaff.containsKey(person.id);
+    final hasWant = dailyShift.wantsMap.containsKey(person.id);
+    
+    final constSkill = dailyShift.constStaff[person.id];
+    final calculatedSkill = dailyShift.calculatedStaff[person.id];
+    final wantSkill = dailyShift.wantsMap[person.id];
+
+    // タイルの色と枠を決定
+    Color tileColor = Colors.white;
+    Color? borderColor;
+    
+    if (isCalculated) {
+      // 計算結果配置 - 薄い青背景
+      tileColor = Colors.blue[50]!;
+    } else if (isConst) {
+      // 固定 - オレンジ背景
+      tileColor = Colors.orange[100]!;
+    } else if (hasWant) {
+      // 希望 - プライマリカラー枠
+      borderColor = primaryColor;
     }
 
-    return Container(
-      height: cellHeight,
-      decoration: BoxDecoration(
-        color: isAssigned ? Colors.blue[50] : Colors.white,
-      ),
-      child: Stack(
-        children: [
-          // 左上: 希望スキル表示
-          if (leftTopSkills.isNotEmpty)
-            Positioned(
-              top: 4,
-              left: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: leftTopSkills.map((skill) {
-                  return Text(
-                    skill,
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Colors.blue[700],
-                      fontWeight: FontWeight.w500,
-                      height: 1.2,
-                    ),
+    // 選択状態のチェック
+    final isSelected = selectedShifts.value[shiftId] ?? false;
+
+    return InkWell(
+      onTap: () {
+        if (isSelectionMode.value) {
+          // 選択モードでは選択状態を切り替え
+          selectedShifts.value = {
+            ...selectedShifts.value,
+            shiftId: !isSelected,
+          };
+        } else if (isCalculated) {
+          // 計算結果配置の場合は何もしない
+          return;
+        } else {
+          // 状態を切り替え
+          if (!hasWant && !isConst) {
+            // 未選択 → 希望状態
+            ref.read(shiftDataProvider.notifier).setDailyWant(
+                  shiftId,
+                  person.id,
+                  'スキル指定なし',
+                );
+          } else if (hasWant && !isConst) {
+            // 希望状態 → 固定状態
+            final skillToUse = wantSkill == 'スキル指定なし' 
+                ? (person.skills.isNotEmpty ? person.skills.first : '')
+                : wantSkill!;
+            
+            if (skillToUse.isNotEmpty) {
+              ref.read(shiftDataProvider.notifier).setDailyConstStaff(
+                    shiftId,
+                    person.id,
+                    skillToUse,
                   );
-                }).toList(),
+            }
+          } else if (isConst) {
+            // 固定状態 → 未選択状態
+            ref.read(shiftDataProvider.notifier).clearPersonShift(shiftId, person.id);
+          }
+        }
+      },
+      child: Container(
+        height: 40,
+        decoration: BoxDecoration(
+          color: tileColor,
+          border: Border.all(
+            color: borderColor ?? Colors.grey[300]!,
+            width: borderColor != null ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            // 選択モードのチェックボックス
+            if (isSelectionMode.value)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Icon(
+                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
+                  size: 16,
+                  color: primaryColor,
+                ),
+              ),
+            // 左側: パターン名またはスキル
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!hasWant && !isConst && !isCalculated) ...[
+                      // 未選択状態: パターン名のみ
+                      Text(
+                        pattern.name,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[600],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ] else if (hasWant && !isConst && !isCalculated) ...[
+                      // 希望状態: パターン名とスキル
+                      Text(
+                        pattern.name,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey[500],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      _buildSkillDisplay(wantSkill, person.skills, primaryColor),
+                    ] else if (isConst) ...[
+                      // 固定状態: パターン名とスキル
+                      Text(
+                        pattern.name,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey[500],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        constSkill ?? '',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[800],
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ] else if (isCalculated) ...[
+                      // 計算結果配置: パターン名とスキル
+                      Text(
+                        pattern.name,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey[500],
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        calculatedSkill ?? '',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue[700],
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
-          
-          // 中央: 固定・計算結果のみ
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (isConst) ...[
-                  // 固定スタッフ
-                  Icon(Icons.push_pin, size: 14, color: Colors.orange[700]),
-                  const SizedBox(height: 2),
-                  Text(
-                    constSkill ?? '',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.orange[700],
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ] else if (assignedSkill != null) ...[
-                  // 計算結果で配置された
-                  Text(
-                    assignedSkill,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.green[700],
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          
-          // 右上: アイコンボタン
-          Positioned(
-            top: 2,
-            right: 2,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // ゴミ箱アイコン（クリア）
-                if (hasWant || isConst || assignedSkill != null)
-                  InkWell(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('確認'),
-                          content: Text('${person.name}のこのシフトの内容をクリアしますか？'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('キャンセル'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () {
-                                ref
-                                    .read(shiftDataProvider.notifier)
-                                    .clearPersonShift(shiftId, person.id);
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: const Text('クリア'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      child: Icon(
-                        Icons.delete_outline,
-                        size: 14,
-                        color: Colors.red[400],
-                      ),
-                    ),
-                  ),
-                // ピンアイコン
+            // 右側: アイコン
+            if (!isSelectionMode.value) ...[
+              if (isCalculated) ...[
+                // 計算結果配置: ✕アイコン
                 InkWell(
                   onTap: () {
-                    if (isConst) {
-                      // 固定解除
-                      ref
-                          .read(shiftDataProvider.notifier)
-                          .removeDailyConstStaff(shiftId, person.id);
-                    } else {
-                      // 固定設定
-                      _showConstStaffDialog(
-                          context, ref, shiftId, person.id, person.name, person.skills);
-                    }
+                    ref.read(shiftDataProvider.notifier).revertCalculatedToWant(
+                          shiftId,
+                          person.id,
+                        );
                   },
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
                     child: Icon(
-                      isConst ? Icons.push_pin : Icons.push_pin_outlined,
-                      size: 14,
-                      color: isConst ? Colors.orange[700] : Colors.grey[400],
+                      Icons.close,
+                      size: 16,
+                      color: Colors.red[400],
                     ),
                   ),
                 ),
-                // 編集/追加アイコン
-                if (!isConst) ...[
-                  if (hasWant)
-                    // 編集アイコン
-                    InkWell(
-                      onTap: () {
-                        _showWantDialog(
-                            context, ref, shiftId, person.id, person.name, person.skills, currentWant);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(
-                          Icons.edit,
-                          size: 14,
-                          color: primaryColor,
-                        ),
-                      ),
-                    )
-                  else
-                    // ＋アイコン（即座に配置）
-                    InkWell(
-                      onTap: () {
-                        // 即座に「スキル指定なし」で配置
-                        ref.read(shiftDataProvider.notifier).setDailyWant(
-                              shiftId,
-                              person.id,
-                              'スキル指定なし',
-                            );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        child: Icon(
-                          Icons.add,
-                          size: 14,
-                          color: primaryColor,
-                        ),
-                      ),
+              ] else if (hasWant || isConst) ...[
+                // 希望状態または固定状態: ペンアイコン
+                InkWell(
+                  onTap: () {
+                    _showEditDialog(
+                      context,
+                      ref,
+                      shiftId,
+                      person,
+                      isConst,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.edit,
+                      size: 16,
+                      color: Colors.grey[600],
                     ),
-                ],
+                  ),
+                ),
               ],
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildSkillDisplay(String? wantSkill, List<String> personSkills, Color color) {
+    if (wantSkill == 'スキル指定なし') {
+      // 持っている全スキルを表示
+      return Text(
+        personSkills.join(','),
+        style: TextStyle(
+          fontSize: 9,
+          color: color,
+          fontWeight: FontWeight.w500,
+        ),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      );
+    } else {
+      // 特定スキルを表示
+      return Text(
+        wantSkill ?? '',
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+        overflow: TextOverflow.ellipsis,
+      );
+    }
   }
 
   String _getWeekday(DateTime date) {
@@ -692,126 +665,79 @@ class ShiftManagementScreen extends HookConsumerWidget {
     return weekdays[date.weekday - 1];
   }
 
-  // 必要人数編集ダイアログ
-  void _showRequiredEditDialog(
+  void _showEditDialog(
     BuildContext context,
     WidgetRef ref,
     String shiftId,
-    DateTime date,
-    ShiftPattern pattern,
-    DailyShift dailyShift,
-    List<String> skills,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) => _RequiredEditDialog(
-        shiftId: shiftId,
-        date: date,
-        pattern: pattern,
-        dailyShift: dailyShift,
-        skills: skills,
-      ),
-    );
-  }
-
-  void _showConstStaffDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String shiftId,
-    String personId,
-    String personName,
-    List<String> personSkills,
+    Person person,
+    bool isConst,
   ) {
     final shiftData = ref.read(shiftDataProvider);
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$personNameを固定スタッフに設定'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: shiftData.skills.map((skill) {
-              final hasSKill = personSkills.contains(skill);
-              return ListTile(
-                title: Text(skill),
-                trailing: hasSKill ? null : const Text(
-                  '未習得',
-                  style: TextStyle(fontSize: 12, color: Colors.orange),
-                ),
-                onTap: () {
-                  ref.read(shiftDataProvider.notifier).setDailyConstStaff(
-                        shiftId,
-                        personId,
-                        skill,
-                      );
-                  Navigator.pop(context);
-                },
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-        ],
-      ),
-    );
-  }
+    final dailyShift = shiftData.dailyShifts[shiftId];
+    if (dailyShift == null) return;
 
-  void _showWantDialog(
-    BuildContext context,
-    WidgetRef ref,
-    String shiftId,
-    String personId,
-    String personName,
-    List<String> personSkills,
-    String? currentWant,
-  ) {
+    final currentWant = dailyShift.wantsMap[person.id];
+    final currentConst = dailyShift.constStaff[person.id];
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('$personNameの希望シフト'),
+        title: Text('${person.name}のシフト編集'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // 削除オプション
-            if (currentWant != null)
-              ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('希望を削除'),
-                onTap: () {
-                  ref.read(shiftDataProvider.notifier).removeDailyWant(shiftId, personId);
-                  Navigator.pop(context);
-                },
-              ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('削除'),
+              onTap: () {
+                ref.read(shiftDataProvider.notifier).clearPersonShift(shiftId, person.id);
+                Navigator.pop(context);
+              },
+            ),
             const Divider(),
             // スキル指定なし
-            ListTile(
-              title: const Text('スキル指定なし'),
-              leading: Radio<String>(
-                value: 'スキル指定なし',
-                groupValue: currentWant,
-                onChanged: (value) {
-                  if (value != null) {
-                    ref.read(shiftDataProvider.notifier).setDailyWant(shiftId, personId, value);
-                    Navigator.pop(context);
-                  }
-                },
-              ),
-            ),
-            // 各スキル
-            ...personSkills.map((skill) {
-              return ListTile(
-                title: Text(skill),
+            if (!isConst)
+              ListTile(
+                title: const Text('スキル指定なし'),
                 leading: Radio<String>(
-                  value: skill,
+                  value: 'スキル指定なし',
                   groupValue: currentWant,
                   onChanged: (value) {
                     if (value != null) {
-                      ref.read(shiftDataProvider.notifier).setDailyWant(shiftId, personId, value);
+                      ref.read(shiftDataProvider.notifier).setDailyWant(shiftId, person.id, value);
+                      Navigator.pop(context);
+                    }
+                  },
+                ),
+              ),
+            // 各スキル
+            ...shiftData.skills.map((skill) {
+              final hasSkill = person.skills.contains(skill);
+              return ListTile(
+                title: Text(skill),
+                trailing: hasSkill ? null : const Text(
+                  '未習得',
+                  style: TextStyle(fontSize: 12, color: Colors.orange),
+                ),
+                leading: Radio<String>(
+                  value: skill,
+                  groupValue: isConst ? currentConst : currentWant,
+                  onChanged: (value) {
+                    if (value != null) {
+                      if (isConst) {
+                        ref.read(shiftDataProvider.notifier).setDailyConstStaff(
+                              shiftId,
+                              person.id,
+                              value,
+                            );
+                      } else {
+                        ref.read(shiftDataProvider.notifier).setDailyWant(
+                              shiftId,
+                              person.id,
+                              value,
+                            );
+                      }
                       Navigator.pop(context);
                     }
                   },
@@ -827,128 +753,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// 必要人数編集ダイアログ（StatefulWidget）
-class _RequiredEditDialog extends HookConsumerWidget {
-  final String shiftId;
-  final DateTime date;
-  final ShiftPattern pattern;
-  final DailyShift dailyShift;
-  final List<String> skills;
-
-  const _RequiredEditDialog({
-    required this.shiftId,
-    required this.date,
-    required this.pattern,
-    required this.dailyShift,
-    required this.skills,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // 各スキルの必要人数を管理
-    final requiredCounts = useState<Map<String, int>>(
-      Map<String, int>.from(dailyShift.requiredMap),
-    );
-
-    return AlertDialog(
-      title: Text('${date.month}/${date.day} ${pattern.name} - 必要人数'),
-      content: SizedBox(
-        width: 300,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: skills.map((skill) {
-              final count = requiredCounts.value[skill] ?? 0;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 100,
-                      child: Text(
-                        skill,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    // マイナスボタン
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: count > 0
-                          ? () {
-                              requiredCounts.value = {
-                                ...requiredCounts.value,
-                                skill: count - 1,
-                              };
-                            }
-                          : null,
-                      iconSize: 24,
-                    ),
-                    // 数字表示
-                    SizedBox(
-                      width: 40,
-                      child: Center(
-                        child: Text(
-                          count.toString(),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // プラスボタン
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () {
-                        requiredCounts.value = {
-                          ...requiredCounts.value,
-                          skill: count + 1,
-                        };
-                      },
-                      iconSize: 24,
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            // 必要人数を保存
-            for (final entry in requiredCounts.value.entries) {
-              ref.read(shiftDataProvider.notifier).setDailyRequired(
-                    shiftId,
-                    entry.key,
-                    entry.value,
-                  );
-            }
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('必要人数を更新しました')),
-            );
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryColor,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 }

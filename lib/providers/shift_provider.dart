@@ -121,9 +121,13 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newConstStaff = Map<String, String>.from(shift.constStaff);
       newConstStaff.remove(personId);
       
+      final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
+      newCalculatedStaff.remove(personId);
+      
       newDailyShifts[entry.key] = shift.copyWith(
         wantsMap: newWantsMap,
         constStaff: newConstStaff,
+        calculatedStaff: newCalculatedStaff,
       );
     }
     
@@ -184,10 +188,14 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newConstStaff = Map<String, String>.from(shift.constStaff);
       newConstStaff.removeWhere((key, value) => value == skill);
       
+      final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
+      newCalculatedStaff.removeWhere((key, value) => value == skill);
+      
       newDailyShifts[entry.key] = shift.copyWith(
         requiredMap: newRequiredMap,
         wantsMap: newWantsMap,
         constStaff: newConstStaff,
+        calculatedStaff: newCalculatedStaff,
       );
     }
     
@@ -258,6 +266,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       wantsMap: {},
       requiredMap: defaultRequired,
       constStaff: {},
+      calculatedStaff: {},
     );
   }
 
@@ -362,6 +371,27 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     updateDailyShift(shift.copyWith(constStaff: newConstStaff));
   }
 
+  /// 計算結果配置を希望状態に戻す
+  void revertCalculatedToWant(String shiftId, String personId) {
+    final shift = state.dailyShifts[shiftId];
+    if (shift == null) return;
+    
+    // calculatedStaffから削除
+    final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
+    final skill = newCalculatedStaff.remove(personId);
+    
+    // wantsMapに追加（希望状態に戻す）
+    final newWantsMap = Map<String, String>.from(shift.wantsMap);
+    if (skill != null) {
+      newWantsMap[personId] = skill;
+    }
+    
+    updateDailyShift(shift.copyWith(
+      calculatedStaff: newCalculatedStaff,
+      wantsMap: newWantsMap,
+    ));
+  }
+
   /// シフトを計算
   Future<void> calculateShift(String shiftId) async {
     // shiftIdから日付とシフトタイプを取得
@@ -385,9 +415,14 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       peopleMap[person.id] = person.skills;
     }
 
-    // 固定スタッフを除外したwantsMapを作成
+    // 固定スタッフと既存の計算結果配置を統合
+    final allConstStaff = <String, String>{};
+    allConstStaff.addAll(shift.constStaff);
+    allConstStaff.addAll(shift.calculatedStaff); // 既存の計算結果も固定として扱う
+
+    // 固定スタッフと計算結果配置を除外したwantsMapを作成
     final filteredWantsMap = Map<String, String>.from(shift.wantsMap);
-    for (final personId in shift.constStaff.keys) {
+    for (final personId in allConstStaff.keys) {
       filteredWantsMap.remove(personId);
     }
 
@@ -396,13 +431,33 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       peopleMap: peopleMap,
       wantsMap: filteredWantsMap,
       requiredMap: shift.requiredMap,
-      constCustomer: shift.constStaff,
+      constCustomer: allConstStaff, // 固定＋既存の計算結果配置
       sorryScores: state.sorryScores,
-      allDailyShifts: state.dailyShifts, // 全シフト情報を渡す
+      allDailyShifts: state.dailyShifts,
     );
+
+    // 新しい計算結果を既存のcalculatedStaffと統合
+    final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
+    final newlyAssigned = <String>{}; // 今回新しく配置されたスタッフ
+    
+    for (final entry in result.resultMap.entries) {
+      final skill = entry.key;
+      for (final personId in entry.value) {
+        newCalculatedStaff[personId] = skill;
+        newlyAssigned.add(personId);
+      }
+    }
+
+    // 今回新しく配置されたスタッフをwantsMapから削除
+    final newWantsMap = Map<String, String>.from(shift.wantsMap);
+    for (final personId in newlyAssigned) {
+      newWantsMap.remove(personId);
+    }
 
     // 結果を保存
     updateDailyShift(shift.copyWith(
+      calculatedStaff: newCalculatedStaff,
+      wantsMap: newWantsMap,
       resultMap: result.resultMap,
       isCalculated: true,
     ));
@@ -450,6 +505,10 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     final newConstStaff = Map<String, String>.from(shift.constStaff);
     newConstStaff.remove(personId);
     
+    // 計算結果配置を削除
+    final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
+    newCalculatedStaff.remove(personId);
+    
     // 計算結果からも削除
     Map<String, List<String>>? newResultMap;
     if (shift.resultMap != null) {
@@ -462,6 +521,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     updateDailyShift(shift.copyWith(
       wantsMap: newWantsMap,
       constStaff: newConstStaff,
+      calculatedStaff: newCalculatedStaff,
       resultMap: newResultMap,
     ));
   }
@@ -474,6 +534,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     updateDailyShift(shift.copyWith(
       wantsMap: {},
       constStaff: {},
+      calculatedStaff: {},
       resultMap: null,
       isCalculated: false,
     ));
@@ -486,6 +547,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       newDailyShifts[entry.key] = entry.value.copyWith(
         wantsMap: {},
         constStaff: {},
+        calculatedStaff: {},
         resultMap: null,
         isCalculated: false,
       );

@@ -99,6 +99,7 @@ class DailyShift {
   final Map<String, String> wantsMap; // personId -> skill or 'スキル指定なし'
   final Map<String, int> requiredMap; // skill -> count
   final Map<String, String> constStaff; // personId -> skill (固定スタッフ)
+  final Map<String, String> calculatedStaff; // personId -> skill (計算結果で配置されたスタッフ)
   final Map<String, List<String>>? resultMap; // skill -> [personIds]
   final bool isCalculated; // 計算済みかどうか
 
@@ -109,9 +110,10 @@ class DailyShift {
     required this.wantsMap,
     required this.requiredMap,
     required this.constStaff,
+    Map<String, String>? calculatedStaff,
     this.resultMap,
     this.isCalculated = false,
-  });
+  }) : calculatedStaff = calculatedStaff ?? {};
 
   Map<String, dynamic> toJson() => {
         'shiftId': shiftId,
@@ -120,6 +122,7 @@ class DailyShift {
         'wantsMap': wantsMap,
         'requiredMap': requiredMap,
         'constStaff': constStaff,
+        'calculatedStaff': calculatedStaff,
         'resultMap': resultMap,
         'isCalculated': isCalculated,
       };
@@ -139,6 +142,7 @@ class DailyShift {
       wantsMap: Map<String, String>.from(json['wantsMap'] as Map? ?? {}),
       requiredMap: Map<String, int>.from(json['requiredMap'] as Map? ?? {}),
       constStaff: Map<String, String>.from(json['constStaff'] as Map? ?? json['constCustomer'] as Map? ?? {}),
+      calculatedStaff: Map<String, String>.from(json['calculatedStaff'] as Map? ?? {}),
       resultMap: resultMap,
       isCalculated: json['isCalculated'] as bool? ?? false,
     );
@@ -151,6 +155,7 @@ class DailyShift {
     Map<String, String>? wantsMap,
     Map<String, int>? requiredMap,
     Map<String, String>? constStaff,
+    Map<String, String>? calculatedStaff,
     Map<String, List<String>>? resultMap,
     bool? isCalculated,
   }) {
@@ -161,6 +166,7 @@ class DailyShift {
       wantsMap: wantsMap ?? this.wantsMap,
       requiredMap: requiredMap ?? this.requiredMap,
       constStaff: constStaff ?? this.constStaff,
+      calculatedStaff: calculatedStaff ?? this.calculatedStaff,
       resultMap: resultMap ?? this.resultMap,
       isCalculated: isCalculated ?? this.isCalculated,
     );
@@ -306,6 +312,7 @@ class ShiftData {
       wantsMap: {},
       requiredMap: defaultRequired,
       constStaff: {},
+      calculatedStaff: {},
     );
   }
 }
