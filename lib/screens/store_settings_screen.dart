@@ -79,10 +79,6 @@ class StoreSettingsScreen extends HookConsumerWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: primaryColor.withOpacity(0.1),
-                            child: Icon(Icons.work, color: primaryColor, size: 20),
-                          ),
                           title: Text(
                             skill,
                             style: const TextStyle(
