@@ -308,42 +308,46 @@ class ShiftManagementScreen extends HookConsumerWidget {
                     ),
                   ),
                   
-                  // 固定人数状況行
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // 人数状況ラベル
-                        Container(
-                          width: staffColumnWidth,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            border: Border.all(color: borderColor, width: 1),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '人数状況',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                                fontSize: 14,
+                  // シフトパターンごとの人数状況行
+                  ...shiftData.shiftPatterns.map((pattern) {
+                    return IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // パターン名ラベル
+                          Container(
+                            width: staffColumnWidth,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: primaryColor.withOpacity(0.1),
+                              border: Border.all(color: borderColor, width: 1),
+                            ),
+                            child: Center(
+                              child: Text(
+                                pattern.name,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        // 各日付の人数状況セル
-                        ...dates.map((date) {
-                          return _buildRequirementStatusCell(
-                            context: context,
-                            ref: ref,
-                            date: date,
-                            shiftData: shiftData,
-                            cellWidth: cellWidth,
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
+                          // 各日付の人数状況セル
+                          ...dates.map((date) {
+                            return _buildRequirementStatusCellForPattern(
+                              context: context,
+                              ref: ref,
+                              date: date,
+                              pattern: pattern,
+                              shiftData: shiftData,
+                              cellWidth: cellWidth,
+                            );
+                          }),
+                        ],
+                      ),
+                    );
+                  }),
                   
                   // スクロール可能なシフトデータ部分
                   Expanded(
@@ -399,47 +403,17 @@ class ShiftManagementScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildRequirementStatusCell({
+  Widget _buildRequirementStatusCellForPattern({
     required BuildContext context,
     required WidgetRef ref,
     required DateTime date,
+    required ShiftPattern pattern,
     required ShiftData shiftData,
     required double cellWidth,
   }) {
-    return Container(
-      width: cellWidth,
-      decoration: BoxDecoration(
-        color: Colors.grey[100],
-        border: Border.all(color: borderColor, width: 1),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: Column(
-        children: shiftData.shiftPatterns.map((pattern) {
-          final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
-          final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
-          
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: _buildRequirementTile(
-              context: context,
-              ref: ref,
-              pattern: pattern,
-              dailyShift: dailyShift,
-              date: date,
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildRequirementTile({
-    required BuildContext context,
-    required WidgetRef ref,
-    required ShiftPattern pattern,
-    required DailyShift dailyShift,
-    required DateTime date,
-  }) {
+    final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+    final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
+    
     // 配置済み人数を計算
     final assignedCounts = <String, int>{};
     bool hasAnyRequirement = false;
@@ -468,95 +442,70 @@ class ShiftManagementScreen extends HookConsumerWidget {
       }
     }
     
-    // 枠線の色を決定
-    Color? borderColor;
-    if (hasAnyRequirement) {
-      borderColor = allFulfilled ? Colors.green[400] : Colors.red[400];
-    }
+    // 背景色を決定
+    Color backgroundColor = primaryColor.withOpacity(0.1);
     
     return InkWell(
       onTap: () {
         _showRequiredEditDialog(
           context,
           ref,
-          dailyShift.shiftId,
+          shiftId,
           date,
           pattern,
           dailyShift,
         );
       },
       child: Container(
-        height: 40,
+        width: cellWidth,
+        height: 50,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: borderColor ?? Colors.grey[300]!,
-            width: borderColor != null ? 2 : 1,
-          ),
+          color: backgroundColor,
+          border: Border.all(color: borderColor, width: 1),
         ),
-        child: Row(
+        child: Stack(
           children: [
-            // 左側: パターン名とスキル情報
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // パターン名
-                    Text(
-                      pattern.name,
+            // 中央にスキル情報を表示
+            Center(
+              child: hasAnyRequirement
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: dailyShift.requiredMap.entries.map((entry) {
+                          final skill = entry.key;
+                          final required = entry.value;
+                          final assigned = assignedCounts[skill] ?? 0;
+                          
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Text(
+                              '$skill:$assigned/$required',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: assigned >= required 
+                                    ? Colors.green[700]
+                                    : Colors.red[700],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    )
+                  : Text(
+                      '未設定',
                       style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.grey[500],
+                        fontSize: 11,
+                        color: Colors.grey[600],
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    // スキル情報
-                    if (hasAnyRequirement)
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: dailyShift.requiredMap.entries.map((entry) {
-                              final skill = entry.key;
-                              final required = entry.value;
-                              final assigned = assignedCounts[skill] ?? 0;
-                              
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 4),
-                                child: Text(
-                                  '$skill:$assigned/$required',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: assigned >= required 
-                                        ? Colors.green[700]
-                                        : Colors.red[700],
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      )
-                    else
-                      Text(
-                        '未設定',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                  ],
-                ),
-              ),
             ),
-            // 右側: ペンアイコン
-            Padding(
-              padding: const EdgeInsets.all(4),
+            // 右上にペンアイコン
+            Positioned(
+              top: 4,
+              right: 4,
               child: Icon(
                 Icons.edit,
                 size: 16,
@@ -603,6 +552,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
       ),
     );
   }
+
 
   Widget _buildShiftTile({
     required BuildContext context,
