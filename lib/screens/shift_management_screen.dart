@@ -16,14 +16,18 @@ class ShiftManagementScreen extends HookConsumerWidget {
     
     // 選択モードかどうか
     final isSelectionMode = useState(false);
-    // 選択されたシフトIDを管理
-    final selectedShifts = useState<Map<String, bool>>({});
+    // 選択された日付を管理 (日付文字列 -> bool)
+    final selectedDates = useState<Map<String, bool>>({});
 
     // 30日分の日付を生成
     final dates = <DateTime>[];
     for (int i = 0; i < 30; i++) {
       dates.add(DateTime.now().add(Duration(days: i)));
     }
+
+    const cellWidth = 180.0;
+    const headerHeight = 80.0;
+    const staffColumnWidth = 150.0;
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -47,7 +51,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                 TextButton(
                   onPressed: () {
                     isSelectionMode.value = false;
-                    selectedShifts.value = {};
+                    selectedDates.value = {};
                   },
                   child: const Text('選択解除'),
                 ),
@@ -62,7 +66,8 @@ class ShiftManagementScreen extends HookConsumerWidget {
                         if (!isSelectionMode.value) {
                           isSelectionMode.value = true;
                         } else {
-                          final selected = selectedShifts.value.entries
+                          // 選択された日付を取得
+                          final selected = selectedDates.value.entries
                               .where((entry) => entry.value == true)
                               .map((entry) => entry.key)
                               .toList();
@@ -70,7 +75,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                           if (selected.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('計算するシフトを選択してください'),
+                                content: Text('計算する日付を選択してください'),
                                 backgroundColor: Colors.orange,
                               ),
                             );
@@ -80,16 +85,31 @@ class ShiftManagementScreen extends HookConsumerWidget {
                           isCalculating.value = true;
                           Future(() async {
                             try {
+                              // 選択された日付の全パターンのshiftIdを生成
+                              final allShiftIds = <String>[];
+                              for (final dateStr in selected) {
+                                final parts = dateStr.split('-');
+                                final date = DateTime(
+                                  int.parse(parts[0]),
+                                  int.parse(parts[1]),
+                                  int.parse(parts[2]),
+                                );
+                                for (final pattern in shiftData.shiftPatterns) {
+                                  final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+                                  allShiftIds.add(shiftId);
+                                }
+                              }
+                              
                               await ref
                                   .read(shiftDataProvider.notifier)
-                                  .calculateShifts(selected);
+                                  .calculateShifts(allShiftIds);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('${selected.length}件のシフトを計算しました'),
+                                  content: Text('${selected.length}日分のシフトを計算しました'),
                                 ),
                               );
                               isSelectionMode.value = false;
-                              selectedShifts.value = {};
+                              selectedDates.value = {};
                             } finally {
                               isCalculating.value = false;
                             }
@@ -167,7 +187,7 @@ class ShiftManagementScreen extends HookConsumerWidget {
                     context: context,
                     builder: (context) => AlertDialog(
                       title: const Text('確認'),
-                      content: const Text('全てのシフトの希望・固定・計算結果をクリアしますか？'),
+                      content: const Text('全てのシフトの希望・固定・計算結果をクリアしますか?'),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
@@ -202,19 +222,175 @@ class ShiftManagementScreen extends HookConsumerWidget {
           ),
           const SizedBox(height: 24),
           
-          // グリッドビュー
+          // グリッドビュー（完全同期スクロール）
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SingleChildScrollView(
-                child: _buildShiftGrid(
-                  context,
-                  ref,
-                  shiftData,
-                  dates,
-                  isSelectionMode,
-                  selectedShifts,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 固定ヘッダー（日付）
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 左上のセル
+                        Container(
+                          width: staffColumnWidth,
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '日付',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // 各日付のヘッダー
+                        ...dates.map((date) {
+                          final dateStr = '${date.year}-${date.month}-${date.day}';
+                          final isSelected = selectedDates.value[dateStr] ?? false;
+                          
+                          return InkWell(
+                            onTap: isSelectionMode.value
+                                ? () {
+                                    // 選択モードの場合、日付の選択を切り替え
+                                    selectedDates.value = {
+                                      ...selectedDates.value,
+                                      dateStr: !isSelected,
+                                    };
+                                  }
+                                : null,
+                            child: Container(
+                              width: cellWidth,
+                              height: headerHeight,
+                              decoration: BoxDecoration(
+                                color: primaryColor.withOpacity(0.1),
+                                border: Border.all(color: borderColor, width: 1),
+                              ),
+                              padding: const EdgeInsets.all(8),
+                              child: Stack(
+                                children: [
+                                  // チェックボックス（左上）
+                                  if (isSelectionMode.value)
+                                    Positioned(
+                                      top: 0,
+                                      left: 0,
+                                      child: Icon(
+                                        isSelected
+                                            ? Icons.check_box
+                                            : Icons.check_box_outline_blank,
+                                        size: 20,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                  // 日付テキスト（中央）
+                                  Center(
+                                    child: Text(
+                                      '${date.month}/${date.day}(${_getWeekday(date)})',
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  
+                  // 固定人数状況行
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 人数状況ラベル
+                        Container(
+                          width: staffColumnWidth,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            border: Border.all(color: borderColor, width: 1),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '人数状況',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // 各日付の人数状況セル
+                        ...dates.map((date) {
+                          return _buildRequirementStatusCell(
+                            context: context,
+                            ref: ref,
+                            date: date,
+                            shiftData: shiftData,
+                            cellWidth: cellWidth,
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  
+                  // スクロール可能なシフトデータ部分
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: shiftData.people.map((person) {
+                          return IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // スタッフ名セル
+                                Container(
+                                  width: staffColumnWidth,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[50],
+                                    border: Border.all(color: borderColor, width: 1),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      person.name,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                                // 各日付のシフトセル
+                                ...dates.map((date) {
+                                  return _buildDateCell(
+                                    context: context,
+                                    ref: ref,
+                                    person: person,
+                                    date: date,
+                                    shiftData: shiftData,
+                                    cellWidth: cellWidth,
+                                  );
+                                }),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -223,160 +399,173 @@ class ShiftManagementScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildShiftGrid(
-    BuildContext context,
-    WidgetRef ref,
-    ShiftData shiftData,
-    List<DateTime> dates,
-    ValueNotifier<bool> isSelectionMode,
-    ValueNotifier<Map<String, bool>> selectedShifts,
-  ) {
-    const cellWidth = 180.0;
-    const headerHeight = 120.0;
+  Widget _buildRequirementStatusCell({
+    required BuildContext context,
+    required WidgetRef ref,
+    required DateTime date,
+    required ShiftData shiftData,
+    required double cellWidth,
+  }) {
+    return Container(
+      width: cellWidth,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        children: shiftData.shiftPatterns.map((pattern) {
+          final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
+          final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
+          
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _buildRequirementTile(
+              context: context,
+              ref: ref,
+              pattern: pattern,
+              dailyShift: dailyShift,
+              date: date,
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
 
-    return Table(
-      border: TableBorder.all(color: borderColor, width: 1),
-      defaultColumnWidth: const FixedColumnWidth(cellWidth),
-      children: [
-        // ヘッダー行: 日付
-        TableRow(
-          decoration: BoxDecoration(color: primaryColor.withOpacity(0.1)),
+  Widget _buildRequirementTile({
+    required BuildContext context,
+    required WidgetRef ref,
+    required ShiftPattern pattern,
+    required DailyShift dailyShift,
+    required DateTime date,
+  }) {
+    // 配置済み人数を計算
+    final assignedCounts = <String, int>{};
+    bool hasAnyRequirement = false;
+    
+    for (final skill in dailyShift.requiredMap.keys) {
+      hasAnyRequirement = true;
+      int count = 0;
+      // 固定スタッフ
+      count += dailyShift.constStaff.values.where((s) => s == skill).length;
+      // 計算結果配置
+      count += dailyShift.calculatedStaff.values.where((s) => s == skill).length;
+      assignedCounts[skill] = count;
+    }
+    
+    // すべて満たされているかチェック
+    bool allFulfilled = hasAnyRequirement;
+    if (hasAnyRequirement) {
+      for (final entry in dailyShift.requiredMap.entries) {
+        final skill = entry.key;
+        final required = entry.value;
+        final assigned = assignedCounts[skill] ?? 0;
+        if (assigned < required) {
+          allFulfilled = false;
+          break;
+        }
+      }
+    }
+    
+    // 枠線の色を決定
+    Color? borderColor;
+    if (hasAnyRequirement) {
+      borderColor = allFulfilled ? Colors.green[400] : Colors.red[400];
+    }
+    
+    return InkWell(
+      onTap: () {
+        _showRequiredEditDialog(
+          context,
+          ref,
+          dailyShift.shiftId,
+          date,
+          pattern,
+          dailyShift,
+        );
+      },
+      child: Container(
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor ?? Colors.grey[300]!,
+            width: borderColor != null ? 2 : 1,
+          ),
+        ),
+        child: Row(
           children: [
-            // 左上のセル（空白）
-            Container(
-              height: headerHeight,
-              padding: const EdgeInsets.all(8),
-              child: Center(
-                child: Text(
-                  'スタッフ',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
+            // 左側: パターン名とスキル情報
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // パターン名
+                    Text(
+                      pattern.name,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey[500],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // スキル情報
+                    if (hasAnyRequirement)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: dailyShift.requiredMap.entries.map((entry) {
+                              final skill = entry.key;
+                              final required = entry.value;
+                              final assigned = assignedCounts[skill] ?? 0;
+                              
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Text(
+                                  '$skill:$assigned/$required',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: assigned >= required 
+                                        ? Colors.green[700]
+                                        : Colors.red[700],
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        '未設定',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
-            // 各日付のヘッダー
-            ...dates.map((date) {
-              return Container(
-                height: headerHeight,
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '${date.month}/${date.day}(${_getWeekday(date)})',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    // 必要人数の概要を表示（スクロール可能）
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: Column(
-                          children: shiftData.shiftPatterns.map((pattern) {
-                            final shiftId = '${date.year}-${date.month}-${date.day}-${pattern.id}';
-                            final dailyShift = shiftData.getDailyShift(shiftId, date, pattern.name);
-                            
-                            if (dailyShift.requiredMap.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-                            
-                            // 配置済み人数を計算
-                            final assignedCounts = <String, int>{};
-                            for (final skill in dailyShift.requiredMap.keys) {
-                              int count = 0;
-                              // 固定スタッフ
-                              count += dailyShift.constStaff.values.where((s) => s == skill).length;
-                              // 計算結果配置
-                              count += dailyShift.calculatedStaff.values.where((s) => s == skill).length;
-                              assignedCounts[skill] = count;
-                            }
-                            
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Wrap(
-                                spacing: 2,
-                                runSpacing: 2,
-                                alignment: WrapAlignment.center,
-                                children: dailyShift.requiredMap.entries.map((entry) {
-                                  final skill = entry.key;
-                                  final required = entry.value;
-                                  final assigned = assignedCounts[skill] ?? 0;
-                                  
-                                  return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: assigned >= required 
-                                          ? Colors.green[100] 
-                                          : Colors.blue[50],
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '$skill:$assigned/$required',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        color: assigned >= required 
-                                            ? Colors.green[700] 
-                                            : primaryColor,
-                                        fontWeight: assigned >= required 
-                                            ? FontWeight.bold 
-                                            : FontWeight.normal,
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            // 右側: ペンアイコン
+            Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.edit,
+                size: 16,
+                color: Colors.grey[600],
+              ),
+            ),
           ],
         ),
-        // スタッフ行
-        ...shiftData.people.map((person) {
-          return TableRow(
-            children: [
-              // スタッフ名セル
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey[50],
-                ),
-                child: Center(
-                  child: Text(
-                    person.name,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              // 各日付のシフトセル
-              ...dates.map((date) {
-                return _buildDateCell(
-                  context: context,
-                  ref: ref,
-                  person: person,
-                  date: date,
-                  shiftData: shiftData,
-                  isSelectionMode: isSelectionMode,
-                  selectedShifts: selectedShifts,
-                );
-              }),
-            ],
-          );
-        }),
-      ],
+      ),
     );
   }
 
@@ -386,10 +575,13 @@ class ShiftManagementScreen extends HookConsumerWidget {
     required Person person,
     required DateTime date,
     required ShiftData shiftData,
-    required ValueNotifier<bool> isSelectionMode,
-    required ValueNotifier<Map<String, bool>> selectedShifts,
+    required double cellWidth,
   }) {
     return Container(
+      width: cellWidth,
+      decoration: BoxDecoration(
+        border: Border.all(color: borderColor, width: 1),
+      ),
       padding: const EdgeInsets.all(6),
       child: Column(
         children: shiftData.shiftPatterns.map((pattern) {
@@ -405,8 +597,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
               pattern: pattern,
               shiftId: shiftId,
               dailyShift: dailyShift,
-              isSelectionMode: isSelectionMode,
-              selectedShifts: selectedShifts,
             ),
           );
         }).toList(),
@@ -421,8 +611,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
     required ShiftPattern pattern,
     required String shiftId,
     required DailyShift dailyShift,
-    required ValueNotifier<bool> isSelectionMode,
-    required ValueNotifier<Map<String, bool>> selectedShifts,
   }) {
     // 状態を判定
     final isConst = dailyShift.constStaff.containsKey(person.id);
@@ -448,18 +636,9 @@ class ShiftManagementScreen extends HookConsumerWidget {
       borderColor = primaryColor;
     }
 
-    // 選択状態のチェック
-    final isSelected = selectedShifts.value[shiftId] ?? false;
-
     return InkWell(
       onTap: () {
-        if (isSelectionMode.value) {
-          // 選択モードでは選択状態を切り替え
-          selectedShifts.value = {
-            ...selectedShifts.value,
-            shiftId: !isSelected,
-          };
-        } else if (isCalculated) {
+        if (isCalculated) {
           // 計算結果配置の場合は何もしない
           return;
         } else {
@@ -502,16 +681,6 @@ class ShiftManagementScreen extends HookConsumerWidget {
         ),
         child: Row(
           children: [
-            // 選択モードのチェックボックス
-            if (isSelectionMode.value)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Icon(
-                  isSelected ? Icons.check_box : Icons.check_box_outline_blank,
-                  size: 16,
-                  color: primaryColor,
-                ),
-              ),
             // 左側: パターン名またはスキル
             Expanded(
               child: Padding(
@@ -585,47 +754,45 @@ class ShiftManagementScreen extends HookConsumerWidget {
               ),
             ),
             // 右側: アイコン
-            if (!isSelectionMode.value) ...[
-              if (isCalculated) ...[
-                // 計算結果配置: ✕アイコン
-                InkWell(
-                  onTap: () {
-                    ref.read(shiftDataProvider.notifier).revertCalculatedToWant(
-                          shiftId,
-                          person.id,
-                        );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.close,
-                      size: 16,
-                      color: Colors.red[400],
-                    ),
+            if (isCalculated) ...[
+              // 計算結果配置: ✕アイコン
+              InkWell(
+                onTap: () {
+                  ref.read(shiftDataProvider.notifier).revertCalculatedToWant(
+                        shiftId,
+                        person.id,
+                      );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: Colors.red[400],
                   ),
                 ),
-              ] else if (hasWant || isConst) ...[
-                // 希望状態または固定状態: ペンアイコン
-                InkWell(
-                  onTap: () {
-                    _showEditDialog(
-                      context,
-                      ref,
-                      shiftId,
-                      person,
-                      isConst,
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.edit,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
+              ),
+            ] else if (hasWant || isConst) ...[
+              // 希望状態または固定状態: ペンアイコン
+              InkWell(
+                onTap: () {
+                  _showEditDialog(
+                    context,
+                    ref,
+                    shiftId,
+                    person,
+                    isConst,
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.edit,
+                    size: 16,
+                    color: Colors.grey[600],
                   ),
                 ),
-              ],
+              ),
             ],
           ],
         ),
@@ -663,6 +830,29 @@ class ShiftManagementScreen extends HookConsumerWidget {
   String _getWeekday(DateTime date) {
     const weekdays = ['月', '火', '水', '木', '金', '土', '日'];
     return weekdays[date.weekday - 1];
+  }
+
+  // 必要人数編集ダイアログ
+  void _showRequiredEditDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String shiftId,
+    DateTime date,
+    ShiftPattern pattern,
+    DailyShift dailyShift,
+  ) {
+    final shiftData = ref.read(shiftDataProvider);
+    
+    showDialog(
+      context: context,
+      builder: (context) => _RequiredEditDialog(
+        shiftId: shiftId,
+        date: date,
+        pattern: pattern,
+        dailyShift: dailyShift,
+        skills: shiftData.skills,
+      ),
+    );
   }
 
   void _showEditDialog(
@@ -753,6 +943,138 @@ class ShiftManagementScreen extends HookConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 必要人数編集ダイアログ（StatefulWidget）
+class _RequiredEditDialog extends HookConsumerWidget {
+  final String shiftId;
+  final DateTime date;
+  final ShiftPattern pattern;
+  final DailyShift dailyShift;
+  final List<String> skills;
+
+  const _RequiredEditDialog({
+    required this.shiftId,
+    required this.date,
+    required this.pattern,
+    required this.dailyShift,
+    required this.skills,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 各スキルの必要人数を管理
+    final requiredCounts = useState<Map<String, int>>(
+      Map<String, int>.from(dailyShift.requiredMap),
+    );
+
+    return AlertDialog(
+      title: Text('${date.month}/${date.day} ${pattern.name} - 必要人数'),
+      content: SizedBox(
+        width: 300,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: skills.isEmpty
+                ? [
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        'スキルを登録してください',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ]
+                : skills.map((skill) {
+                    final count = requiredCounts.value[skill] ?? 0;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              skill,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          // マイナスボタン
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            onPressed: count > 0
+                                ? () {
+                                    requiredCounts.value = {
+                                      ...requiredCounts.value,
+                                      skill: count - 1,
+                                    };
+                                  }
+                                : null,
+                            iconSize: 24,
+                          ),
+                          // 数字表示
+                          SizedBox(
+                            width: 40,
+                            child: Center(
+                              child: Text(
+                                count.toString(),
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // プラスボタン
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline),
+                            onPressed: () {
+                              requiredCounts.value = {
+                                ...requiredCounts.value,
+                                skill: count + 1,
+                              };
+                            },
+                            iconSize: 24,
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            // 必要人数を保存
+            for (final entry in requiredCounts.value.entries) {
+              ref.read(shiftDataProvider.notifier).setDailyRequired(
+                    shiftId,
+                    entry.key,
+                    entry.value,
+                  );
+            }
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('必要人数を更新しました')),
+            );
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('保存'),
+        ),
+      ],
     );
   }
 }
