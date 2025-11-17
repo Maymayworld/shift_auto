@@ -221,6 +221,38 @@ class AuthNotifier extends StateNotifier<User?> {
       return null;
     }
   }
+
+/// Stripe Checkoutセッションを作成
+Future<String?> createCheckoutSession() async {
+  try {
+    final session = supabase.auth.currentSession;
+    if (session == null) {
+      print('❌ No active session');
+      return null;
+    }
+
+    print('🔵 Creating checkout with token...');
+    
+    final response = await supabase.functions.invoke(
+      'create-checkout-session',
+      method: HttpMethod.post,
+      headers: {
+        'Authorization': 'Bearer ${session.accessToken}',
+      },
+    );
+
+    print('🔵 Response: ${response.data}');
+
+    if (response.data != null && response.data['url'] != null) {
+      return response.data['url'] as String;
+    }
+
+    return null;
+  } catch (e) {
+    print('❌ Error: $e');
+    return null;
+  }
+}
 }
 
 /// サブスクリプション状態

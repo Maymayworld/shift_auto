@@ -1,7 +1,7 @@
-// screens/dashboard_screen.dart
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/shift_provider.dart';
@@ -52,7 +52,7 @@ class DashboardScreen extends HookConsumerWidget {
 
           // トライアル期間バナー
           if (!isLoading.value && trialDaysRemaining.value != null)
-            _buildTrialBanner(context, trialDaysRemaining.value!),
+            _buildTrialBanner(context, ref, trialDaysRemaining.value!),
           
           const SizedBox(height: 24),
 
@@ -82,7 +82,7 @@ class DashboardScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildTrialBanner(BuildContext context, int daysRemaining) {
+  Widget _buildTrialBanner(BuildContext context, WidgetRef ref, int daysRemaining) {
     final isExpiringSoon = daysRemaining <= 3;
     
     return Container(
@@ -142,22 +142,29 @@ class DashboardScreen extends HookConsumerWidget {
           ),
           const SizedBox(height: 16),
           ElevatedButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('準備中'),
-                  content: const Text(
-                    '決済システムは現在準備中です。\nStripe連携完了後に利用可能になります。',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('OK'),
-                    ),
-                  ],
-                ),
-              );
+            onPressed: () async {
+              // Stripe Checkoutセッションを作成
+              final url = await ref.read(authProvider.notifier).createCheckoutSession();
+              
+              if (url != null) {
+                // URLを開く
+                final uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('決済ページを開けませんでした')),
+                    );
+                  }
+                }
+              } else {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('エラーが発生しました')),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white,

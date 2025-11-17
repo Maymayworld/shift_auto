@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/auth_provider.dart';
@@ -317,23 +318,31 @@ class _ProfileDialog extends HookConsumerWidget {
               icon: Icons.credit_card,
               label: '有料プランを見る',
               color: primaryColor,
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text('準備中'),
-                    content: const Text(
-                      '決済システムは現在準備中です。\nStripe連携完了後に利用可能になります。',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('OK'),
-                      ),
-                    ],
-                  ),
-                );
+                
+                // Stripe Checkoutセッションを作成
+                final url = await ref.read(authProvider.notifier).createCheckoutSession();
+                
+                if (url != null) {
+                  // URLを開く
+                  final uri = Uri.parse(url);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('決済ページを開けませんでした')),
+                      );
+                    }
+                  }
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('エラーが発生しました')),
+                    );
+                  }
+                }
               },
             ),
             const SizedBox(height: 8),
