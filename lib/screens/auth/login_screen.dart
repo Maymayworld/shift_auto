@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
+import '../main_layout.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends HookConsumerWidget {
@@ -30,6 +31,14 @@ class LoginScreen extends HookConsumerWidget {
               email: emailController.text.trim(),
               password: passwordController.text,
             );
+        
+        // ログイン成功 → メイン画面に遷移
+        if (context.mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainLayout()),
+            (route) => false,
+          );
+        }
       } catch (e) {
         errorMessage.value = 'ログインに失敗しました。メールアドレスとパスワードを確認してください。';
       } finally {
@@ -49,11 +58,11 @@ class LoginScreen extends HookConsumerWidget {
               children: [
                 // ロゴ・タイトル
                 Icon(
-                  Icons.calendar_today,
-                  size: 80,
+                  Icons.calendar_month,
+                  size: 64,
                   color: primaryColor,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Text(
                   'ShiftAuto',
                   style: TextStyle(
@@ -67,14 +76,14 @@ class LoginScreen extends HookConsumerWidget {
                 Text(
                   '飲食店のシフト管理を自動化',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     color: Colors.grey[600],
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 48),
 
-                // メールアドレス
+                // メールアドレス入力
                 TextField(
                   controller: emailController,
                   decoration: InputDecoration(
@@ -89,7 +98,7 @@ class LoginScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // パスワード
+                // パスワード入力
                 TextField(
                   controller: passwordController,
                   decoration: InputDecoration(
@@ -157,14 +166,14 @@ class LoginScreen extends HookConsumerWidget {
                           ),
                         ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
                 // 新規登録リンク
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'アカウントをお持ちでない方',
+                      'アカウントをお持ちでない方は',
                       style: TextStyle(color: Colors.grey[600]),
                     ),
                     TextButton(
@@ -178,9 +187,12 @@ class LoginScreen extends HookConsumerWidget {
                                 ),
                               );
                             },
-                      child: const Text(
+                      child: Text(
                         '新規登録',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],

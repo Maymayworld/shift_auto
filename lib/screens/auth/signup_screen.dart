@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
+import '../main_layout.dart';
 
 class SignUpScreen extends HookConsumerWidget {
   const SignUpScreen({Key? key}) : super(key: key);
@@ -18,7 +19,6 @@ class SignUpScreen extends HookConsumerWidget {
     final errorMessage = useState<String?>(null);
 
     Future<void> handleSignUp() async {
-      // バリデーション
       if (storeNameController.text.isEmpty ||
           emailController.text.isEmpty ||
           passwordController.text.isEmpty) {
@@ -45,9 +45,14 @@ class SignUpScreen extends HookConsumerWidget {
               password: passwordController.text,
               storeName: storeNameController.text.trim(),
             );
-
-        // signUp成功後、AuthGateが自動的にメイン画面に遷移する
-        // Navigator.popは不要
+        
+        // 登録成功 → メイン画面に遷移
+        if (context.mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainLayout()),
+            (route) => false,
+          );
+        }
       } catch (e) {
         errorMessage.value = '登録に失敗しました。別のメールアドレスをお試しください。';
       } finally {
@@ -69,9 +74,8 @@ class SignUpScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // タイトル
                 Text(
-                  '14日間無料トライアル',
+                  'ShiftAutoへようこそ',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -81,7 +85,7 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'クレジットカード登録不要で今すぐ始められます',
+                  '飲食店のシフト管理を自動化',
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],
@@ -90,7 +94,6 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 32),
 
-                // 店舗名
                 TextField(
                   controller: storeNameController,
                   decoration: InputDecoration(
@@ -104,7 +107,6 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // メールアドレス
                 TextField(
                   controller: emailController,
                   decoration: InputDecoration(
@@ -119,7 +121,6 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // パスワード
                 TextField(
                   controller: passwordController,
                   decoration: InputDecoration(
@@ -134,7 +135,6 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 16),
 
-                // パスワード確認
                 TextField(
                   controller: confirmPasswordController,
                   decoration: InputDecoration(
@@ -150,7 +150,6 @@ class SignUpScreen extends HookConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // エラーメッセージ
                 if (errorMessage.value != null)
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -174,7 +173,6 @@ class SignUpScreen extends HookConsumerWidget {
                     ),
                   ),
 
-                // 登録ボタン
                 ElevatedButton(
                   onPressed: isLoading.value ? null : handleSignUp,
                   style: ElevatedButton.styleFrom(
@@ -195,23 +193,12 @@ class SignUpScreen extends HookConsumerWidget {
                           ),
                         )
                       : const Text(
-                          '無料で始める',
+                          '登録する',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                ),
-                const SizedBox(height: 16),
-
-                // 注意書き
-                Text(
-                  '※トライアル期間終了後、月額4,980円で継続利用できます',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),

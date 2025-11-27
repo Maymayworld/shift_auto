@@ -1,32 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../theme/app_theme.dart';
-import '../providers/auth_provider.dart';
 import '../providers/shift_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../models/shift_data.dart';
 
-class DashboardScreen extends HookConsumerWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shiftData = ref.watch(shiftDataProvider);
-    final trialDaysRemaining = useState<int?>(null);
-    final isLoading = useState(true);
-
-    useEffect(() {
-      Future<void> loadTrialInfo() async {
-        final days = await ref.read(authProvider.notifier).getTrialDaysRemaining();
-        trialDaysRemaining.value = days;
-        isLoading.value = false;
-      }
-      
-      loadTrialInfo();
-      return null;
-    }, []);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -50,12 +34,6 @@ class DashboardScreen extends HookConsumerWidget {
           ),
           const SizedBox(height: 32),
 
-          // トライアル期間バナー
-          if (!isLoading.value && trialDaysRemaining.value != null)
-            _buildTrialBanner(context, ref, trialDaysRemaining.value!),
-          
-          const SizedBox(height: 24),
-
           // 統計情報カード
           _buildStatsCards(context, ref, shiftData),
           
@@ -77,122 +55,6 @@ class DashboardScreen extends HookConsumerWidget {
 
           // 使い方ガイド
           _buildGettingStarted(context, ref, shiftData),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrialBanner(BuildContext context, WidgetRef ref, int daysRemaining) {
-    final isExpiringSoon = daysRemaining <= 3;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: isExpiringSoon
-              ? [Colors.orange[400]!, Colors.orange[600]!]
-              : [primaryColor, primaryColor.withOpacity(0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: (isExpiringSoon ? Colors.orange[300]! : primaryColor).withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                isExpiringSoon ? Icons.warning_amber : Icons.celebration,
-                color: Colors.white,
-                size: 28,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  isExpiringSoon
-                      ? '無料トライアル期間終了まであと${daysRemaining}日'
-                      : '無料トライアル期間中（残り${daysRemaining}日）',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            isExpiringSoon
-                ? 'トライアル期間終了後も引き続きご利用いただくには、有料プランへのアップグレードが必要です。'
-                : 'ShiftAutoの全機能を無料でお試しいただけます。気に入っていただけましたら、ぜひ有料プランをご検討ください。',
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () async {
-              // Stripe Checkoutセッションを作成
-              final url = await ref.read(authProvider.notifier).createCheckoutSession();
-              
-              if (url != null) {
-                // URLを開く
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('決済ページを開けませんでした')),
-                    );
-                  }
-                }
-              } else {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('エラーが発生しました')),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: isExpiringSoon ? Colors.orange[700] : primaryColor,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  '有料プランを見る',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.arrow_forward,
-                  size: 18,
-                  color: isExpiringSoon ? Colors.orange[700] : primaryColor,
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -388,13 +250,11 @@ class DashboardScreen extends HookConsumerWidget {
   }
 
   Widget _buildGettingStarted(BuildContext context, WidgetRef ref, ShiftData shiftData) {
-    // セットアップの進捗を計算
     final hasSkills = shiftData.skills.isNotEmpty;
     final hasPeople = shiftData.people.isNotEmpty;
     final hasPatterns = shiftData.shiftPatterns.isNotEmpty;
 
     if (hasSkills && hasPeople && hasPatterns) {
-      // セットアップ完了
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -434,7 +294,6 @@ class DashboardScreen extends HookConsumerWidget {
       );
     }
 
-    // セットアップ未完了
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
