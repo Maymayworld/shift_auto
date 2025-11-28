@@ -1,7 +1,7 @@
 // providers/shift_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/shift_data.dart';
-import '../services/storage_service.dart';
+import '../services/supabase_data_service.dart';
 import '../services/shift_auto_algorithm.dart';
 
 /// ShiftDataの状態管理
@@ -10,33 +10,43 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     _loadData();
   }
 
+  bool _isLoading = false;
+
   /// データを読み込み
   Future<void> _loadData() async {
-    final data = await StorageService.loadShiftData();
-    if (data != null) {
+    if (_isLoading) return;
+    _isLoading = true;
+    
+    try {
+      final data = await SupabaseDataService.loadAllData();
       state = data;
+    } catch (e) {
+      print('❌ Error loading data: $e');
+    } finally {
+      _isLoading = false;
     }
   }
 
-  /// データを保存
-  Future<void> _saveData() async {
-    await StorageService.saveShiftData(state);
+  /// データを再読み込み
+  Future<void> reload() async {
+    await _loadData();
   }
 
   /// シフトパターンを追加
-  void addShiftPattern(ShiftPattern pattern) {
+  Future<void> addShiftPattern(ShiftPattern pattern) async {
     if (state.shiftPatterns.any((p) => p.id == pattern.id || p.name == pattern.name)) {
-      return; // 重複は追加しない
+      return;
     }
+    
     state = state.copyWith(
       shiftPatterns: [...state.shiftPatterns, pattern],
     );
-    _saveData();
+    
+    await SupabaseDataService.addShiftPattern(pattern);
   }
 
   /// シフトパターンを削除
-  void removeShiftPattern(String patternId) {
-    // 最後の1つは削除できない
+  Future<void> removeShiftPattern(String patternId) async {
     if (state.shiftPatterns.length <= 1) return;
     
     state = state.copyWith(
@@ -45,24 +55,29 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     
     // このパターンを使用しているdailyShiftsを削除
     final newDailyShifts = Map<String, DailyShift>.from(state.dailyShifts);
-    newDailyShifts.removeWhere((key, value) => key.contains('-$patternId'));
+    final keysToRemove = newDailyShifts.keys.where((key) => key.contains('-$patternId')).toList();
+    for (final key in keysToRemove) {
+      newDailyShifts.remove(key);
+      await SupabaseDataService.removeDailyShift(key);
+    }
     
     state = state.copyWith(dailyShifts: newDailyShifts);
-    _saveData();
+    await SupabaseDataService.removeShiftPattern(patternId);
   }
 
   /// シフトパターンを更新
-  void updateShiftPattern(ShiftPattern pattern) {
+  Future<void> updateShiftPattern(ShiftPattern pattern) async {
     state = state.copyWith(
       shiftPatterns: state.shiftPatterns
           .map((p) => p.id == pattern.id ? pattern : p)
           .toList(),
     );
-    _saveData();
+    
+    await SupabaseDataService.updateShiftPattern(pattern);
   }
 
   /// シフトパターンのデフォルト必要人数を設定
-  void setPatternDefaultRequired(String patternId, String skill, int count) {
+  Future<void> setPatternDefaultRequired(String patternId, String skill, int count) async {
     final pattern = state.shiftPatterns.firstWhere((p) => p.id == patternId);
     final newDefaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
     
@@ -72,11 +87,11 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       newDefaultRequired.remove(skill);
     }
     
-    updateShiftPattern(pattern.copyWith(defaultRequiredMap: newDefaultRequired));
+    await updateShiftPattern(pattern.copyWith(defaultRequiredMap: newDefaultRequired));
   }
 
   /// シフトパターンの順序を更新
-  void reorderShiftPatterns(int oldIndex, int newIndex) {
+  Future<void> reorderShiftPatterns(int oldIndex, int newIndex) async {
     final patterns = List<ShiftPattern>.from(state.shiftPatterns);
     if (oldIndex < newIndex) {
       newIndex -= 1;
@@ -84,25 +99,31 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     final item = patterns.removeAt(oldIndex);
     patterns.insert(newIndex, item);
     
-    // sortOrderを更新
     final updatedPatterns = patterns.asMap().entries.map((entry) {
       return entry.value.copyWith(sortOrder: entry.key);
     }).toList();
     
     state = state.copyWith(shiftPatterns: updatedPatterns);
-    _saveData();
+    
+    // 全パターンを更新
+    for (final pattern in updatedPatterns) {
+      await SupabaseDataService.updateShiftPattern(pattern);
+    }
   }
 
   /// 人物を追加
-  void addPerson(Person person) {
+  Future<void> addPerson(Person person) async {
+    // まずDBに追加してIDを取得
+    final newId = await SupabaseDataService.addStaff(person);
+    final newPerson = Person(id: newId, name: person.name, skills: person.skills);
+    
     state = state.copyWith(
-      people: [...state.people, person],
+      people: [...state.people, newPerson],
     );
-    _saveData();
   }
 
   /// 人物を削除
-  void removePerson(String personId) {
+  Future<void> removePerson(String personId) async {
     state = state.copyWith(
       people: state.people.where((p) => p.id != personId).toList(),
     );
@@ -124,55 +145,67 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
       newCalculatedStaff.remove(personId);
       
-      newDailyShifts[entry.key] = shift.copyWith(
+      final updatedShift = shift.copyWith(
         wantsMap: newWantsMap,
         constStaff: newConstStaff,
         calculatedStaff: newCalculatedStaff,
       );
+      newDailyShifts[entry.key] = updatedShift;
+      
+      // DBも更新
+      await SupabaseDataService.saveDailyShift(updatedShift);
     }
     
     state = state.copyWith(
       sorryScores: newSorryScores,
       dailyShifts: newDailyShifts,
     );
-    _saveData();
+    
+    await SupabaseDataService.removeStaff(personId);
+    await SupabaseDataService.saveSorryScores(newSorryScores);
   }
 
   /// 人物を更新
-  void updatePerson(Person person) {
+  Future<void> updatePerson(Person person) async {
     state = state.copyWith(
       people: state.people
           .map((p) => p.id == person.id ? person : p)
           .toList(),
     );
-    _saveData();
+    
+    await SupabaseDataService.updateStaff(person);
   }
 
   /// スキルを追加
-  void addSkill(String skill) {
+  Future<void> addSkill(String skill) async {
     if (state.skills.contains(skill)) return;
+    
     state = state.copyWith(
       skills: [...state.skills, skill],
     );
-    _saveData();
+    
+    await SupabaseDataService.addSkill(skill);
   }
 
   /// スキルを削除
-  void removeSkill(String skill) {
-    // スキルリストから削除
+  Future<void> removeSkill(String skill) async {
     state = state.copyWith(
       skills: state.skills.where((s) => s != skill).toList(),
     );
     
     // スタッフのスキルからも削除
-    final updatedPeople = state.people.map((person) {
+    final updatedPeople = <Person>[];
+    for (final person in state.people) {
       if (person.skills.contains(skill)) {
-        return person.copyWith(
+        final updated = person.copyWith(
           skills: person.skills.where((s) => s != skill).toList(),
         );
+        updatedPeople.add(updated);
+        await SupabaseDataService.updateStaff(updated);
+      } else {
+        updatedPeople.add(person);
       }
-      return person;
-    }).toList();
+    }
     
     // 全ての日付のシフトから削除
     final newDailyShifts = <String, DailyShift>{};
@@ -191,29 +224,32 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
       newCalculatedStaff.removeWhere((key, value) => value == skill);
       
-      newDailyShifts[entry.key] = shift.copyWith(
+      final updatedShift = shift.copyWith(
         requiredMap: newRequiredMap,
         wantsMap: newWantsMap,
         constStaff: newConstStaff,
         calculatedStaff: newCalculatedStaff,
       );
+      newDailyShifts[entry.key] = updatedShift;
+      
+      await SupabaseDataService.saveDailyShift(updatedShift);
     }
     
     state = state.copyWith(
       people: updatedPeople,
       dailyShifts: newDailyShifts,
     );
-    _saveData();
+    
+    await SupabaseDataService.removeSkill(skill);
   }
 
   /// 日付ごとのシフトデータを更新
-  void updateDailyShift(DailyShift dailyShift) {
+  Future<void> updateDailyShift(DailyShift dailyShift) async {
     final newDailyShifts = Map<String, DailyShift>.from(state.dailyShifts);
     
     // 新規作成の場合、デフォルトの必要人数を適用
     if (!state.dailyShifts.containsKey(dailyShift.shiftId) && 
         dailyShift.requiredMap.isEmpty) {
-      // shiftIdからパターンIDを取得
       try {
         final parts = dailyShift.shiftId.split('-');
         if (parts.length >= 4) {
@@ -222,7 +258,6 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
             (p) => p.id == patternId,
             orElse: () => state.shiftPatterns.first,
           );
-          // デフォルト値を適用
           dailyShift = dailyShift.copyWith(
             requiredMap: Map<String, int>.from(pattern.defaultRequiredMap),
           );
@@ -234,7 +269,8 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     
     newDailyShifts[dailyShift.shiftId] = dailyShift;
     state = state.copyWith(dailyShifts: newDailyShifts);
-    _saveData();
+    
+    await SupabaseDataService.saveDailyShift(dailyShift);
   }
 
   /// 特定の日付のシフトを取得または作成
@@ -243,7 +279,6 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       return state.dailyShifts[shiftId]!;
     }
     
-    // 存在しない場合は新規作成
     Map<String, int> defaultRequired = {};
     try {
       final parts = shiftId.split('-');
@@ -271,8 +306,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   }
 
   /// 特定の日付のシフトに希望を設定
-  void setDailyWant(String shiftId, String personId, String skill) {
-    // shiftIdから日付とシフトタイプを取得
+  Future<void> setDailyWant(String shiftId, String personId, String skill) async {
     final parts = shiftId.split('-');
     final date = DateTime(
       int.parse(parts[0]),
@@ -290,23 +324,22 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap[personId] = skill;
     
-    updateDailyShift(shift.copyWith(wantsMap: newWantsMap));
+    await updateDailyShift(shift.copyWith(wantsMap: newWantsMap));
   }
 
   /// 特定の日付のシフトの希望を削除
-  void removeDailyWant(String shiftId, String personId) {
+  Future<void> removeDailyWant(String shiftId, String personId) async {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap.remove(personId);
     
-    updateDailyShift(shift.copyWith(wantsMap: newWantsMap));
+    await updateDailyShift(shift.copyWith(wantsMap: newWantsMap));
   }
 
   /// 特定の日付のシフトの必要人数を設定
-  void setDailyRequired(String shiftId, String skill, int count) {
-    // shiftIdから日付とシフトタイプを取得
+  Future<void> setDailyRequired(String shiftId, String skill, int count) async {
     final parts = shiftId.split('-');
     final date = DateTime(
       int.parse(parts[0]),
@@ -328,12 +361,11 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       newRequiredMap.remove(skill);
     }
     
-    updateDailyShift(shift.copyWith(requiredMap: newRequiredMap));
+    await updateDailyShift(shift.copyWith(requiredMap: newRequiredMap));
   }
 
   /// 特定の日付のシフトに固定スタッフを設定
-  void setDailyConstStaff(String shiftId, String personId, String skill) {
-    // shiftIdから日付とシフトタイプを取得
+  Future<void> setDailyConstStaff(String shiftId, String personId, String skill) async {
     final parts = shiftId.split('-');
     final date = DateTime(
       int.parse(parts[0]),
@@ -354,39 +386,37 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap[personId] = skill;
     
-    updateDailyShift(shift.copyWith(
+    await updateDailyShift(shift.copyWith(
       constStaff: newConstStaff,
       wantsMap: newWantsMap,
     ));
   }
 
   /// 特定の日付のシフトの固定スタッフを削除
-  void removeDailyConstStaff(String shiftId, String personId) {
+  Future<void> removeDailyConstStaff(String shiftId, String personId) async {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
     final newConstStaff = Map<String, String>.from(shift.constStaff);
     newConstStaff.remove(personId);
     
-    updateDailyShift(shift.copyWith(constStaff: newConstStaff));
+    await updateDailyShift(shift.copyWith(constStaff: newConstStaff));
   }
 
   /// 計算結果配置を希望状態に戻す
-  void revertCalculatedToWant(String shiftId, String personId) {
+  Future<void> revertCalculatedToWant(String shiftId, String personId) async {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
-    // calculatedStaffから削除
     final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
     final skill = newCalculatedStaff.remove(personId);
     
-    // wantsMapに追加（希望状態に戻す）
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     if (skill != null) {
       newWantsMap[personId] = skill;
     }
     
-    updateDailyShift(shift.copyWith(
+    await updateDailyShift(shift.copyWith(
       calculatedStaff: newCalculatedStaff,
       wantsMap: newWantsMap,
     ));
@@ -394,7 +424,6 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
 
   /// シフトを計算
   Future<void> calculateShift(String shiftId) async {
-    // shiftIdから日付とシフトタイプを取得
     final parts = shiftId.split('-');
     final date = DateTime(
       int.parse(parts[0]),
@@ -409,36 +438,31 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     
     final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
 
-    // peopleMapを作成
     final peopleMap = <String, List<String>>{};
     for (final person in state.people) {
       peopleMap[person.id] = person.skills;
     }
 
-    // 固定スタッフと既存の計算結果配置を統合
     final allConstStaff = <String, String>{};
     allConstStaff.addAll(shift.constStaff);
-    allConstStaff.addAll(shift.calculatedStaff); // 既存の計算結果も固定として扱う
+    allConstStaff.addAll(shift.calculatedStaff);
 
-    // 固定スタッフと計算結果配置を除外したwantsMapを作成
     final filteredWantsMap = Map<String, String>.from(shift.wantsMap);
     for (final personId in allConstStaff.keys) {
       filteredWantsMap.remove(personId);
     }
 
-    // アルゴリズム実行（allDailyShiftsを渡す）
     final result = ShiftAutoAlgorithm.run(
       peopleMap: peopleMap,
       wantsMap: filteredWantsMap,
       requiredMap: shift.requiredMap,
-      constCustomer: allConstStaff, // 固定＋既存の計算結果配置
+      constCustomer: allConstStaff,
       sorryScores: state.sorryScores,
       allDailyShifts: state.dailyShifts,
     );
 
-    // 新しい計算結果を既存のcalculatedStaffと統合
     final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
-    final newlyAssigned = <String>{}; // 今回新しく配置されたスタッフ
+    final newlyAssigned = <String>{};
     
     for (final entry in result.resultMap.entries) {
       final skill = entry.key;
@@ -448,23 +472,20 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       }
     }
 
-    // 今回新しく配置されたスタッフをwantsMapから削除
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     for (final personId in newlyAssigned) {
       newWantsMap.remove(personId);
     }
 
-    // 結果を保存
-    updateDailyShift(shift.copyWith(
+    await updateDailyShift(shift.copyWith(
       calculatedStaff: newCalculatedStaff,
       wantsMap: newWantsMap,
       resultMap: result.resultMap,
       isCalculated: true,
     ));
 
-    // 不公平スコアを更新
     state = state.copyWith(sorryScores: result.newSorryScores);
-    _saveData();
+    await SupabaseDataService.saveSorryScores(result.newSorryScores);
   }
 
   /// 複数のシフトを計算
@@ -475,14 +496,13 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   }
 
   /// 不公平スコアを更新
-  void updateSorryScores(Map<String, int> newScores) {
+  Future<void> updateSorryScores(Map<String, int> newScores) async {
     state = state.copyWith(sorryScores: newScores);
-    _saveData();
+    await SupabaseDataService.saveSorryScores(newScores);
   }
 
-  /// 特定の人のシフトをクリア（希望・固定・計算結果を削除）
-  void clearPersonShift(String shiftId, String personId) {
-    // shiftIdから日付とシフトタイプを取得
+  /// 特定の人のシフトをクリア
+  Future<void> clearPersonShift(String shiftId, String personId) async {
     final parts = shiftId.split('-');
     final date = DateTime(
       int.parse(parts[0]),
@@ -497,19 +517,15 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     
     final shift = _getOrCreateDailyShift(shiftId, date, pattern.name);
     
-    // 希望を削除
     final newWantsMap = Map<String, String>.from(shift.wantsMap);
     newWantsMap.remove(personId);
     
-    // 固定を削除
     final newConstStaff = Map<String, String>.from(shift.constStaff);
     newConstStaff.remove(personId);
     
-    // 計算結果配置を削除
     final newCalculatedStaff = Map<String, String>.from(shift.calculatedStaff);
     newCalculatedStaff.remove(personId);
     
-    // 計算結果からも削除
     Map<String, List<String>>? newResultMap;
     if (shift.resultMap != null) {
       newResultMap = {};
@@ -518,7 +534,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       }
     }
     
-    updateDailyShift(shift.copyWith(
+    await updateDailyShift(shift.copyWith(
       wantsMap: newWantsMap,
       constStaff: newConstStaff,
       calculatedStaff: newCalculatedStaff,
@@ -526,12 +542,12 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     ));
   }
 
-  /// 特定の日付のシフトをクリア（全員の希望・固定・計算結果を削除）
-  void clearDailyShift(String shiftId) {
+  /// 特定の日付のシフトをクリア
+  Future<void> clearDailyShift(String shiftId) async {
     final shift = state.dailyShifts[shiftId];
     if (shift == null) return;
     
-    updateDailyShift(shift.copyWith(
+    await updateDailyShift(shift.copyWith(
       wantsMap: {},
       constStaff: {},
       calculatedStaff: {},
@@ -541,25 +557,26 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   }
 
   /// 全てのシフトをクリア
-  void clearAllShifts() {
+  Future<void> clearAllShifts() async {
     final newDailyShifts = <String, DailyShift>{};
     for (final entry in state.dailyShifts.entries) {
-      newDailyShifts[entry.key] = entry.value.copyWith(
+      final cleared = entry.value.copyWith(
         wantsMap: {},
         constStaff: {},
         calculatedStaff: {},
         resultMap: null,
         isCalculated: false,
       );
+      newDailyShifts[entry.key] = cleared;
+      await SupabaseDataService.saveDailyShift(cleared);
     }
     state = state.copyWith(dailyShifts: newDailyShifts);
-    _saveData();
   }
 
   /// データをリセット
-  void reset() {
+  Future<void> reset() async {
     state = ShiftData.sample();
-    _saveData();
+    // 注意: DBのデータは削除しない（必要なら別途実装）
   }
 }
 
