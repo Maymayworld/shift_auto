@@ -281,4 +281,30 @@ class SupabaseDataService {
       return ShiftData.sample();
     }
   }
+
+  // ============ バッチ保存 ============
+
+  /// 複数の日別シフトを一括保存
+  static Future<void> saveDailyShiftsBatch(List<DailyShift> shifts) async {
+    if (_userId == null || shifts.isEmpty) return;
+
+    final records = shifts.map((shift) => {
+      'user_id': _userId,
+      'shift_id': shift.shiftId,
+      'date': shift.date.toIso8601String().split('T')[0],
+      'shift_type': shift.shiftType,
+      'wants_map': shift.wantsMap,
+      'required_map': shift.requiredMap,
+      'const_staff': shift.constStaff,
+      'calculated_staff': shift.calculatedStaff,
+      'result_map': shift.resultMap,
+      'is_calculated': shift.isCalculated,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).toList();
+
+    await _supabase.from('daily_shifts').upsert(
+      records,
+      onConflict: 'user_id,shift_id',
+    );
+  }
 }
