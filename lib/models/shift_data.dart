@@ -93,15 +93,16 @@ class Person {
 
 /// 日付ごとのシフトデータ
 class DailyShift {
-  final String shiftId; // 例: "2025-11-03-through"
+  final String shiftId;
   final DateTime date;
-  final String shiftType; // "通し", "早番", "遅番" など
-  final Map<String, String> wantsMap; // personId -> skill or 'スキル指定なし'
-  final Map<String, int> requiredMap; // skill -> count
-  final Map<String, String> constStaff; // personId -> skill (固定スタッフ)
-  final Map<String, String> calculatedStaff; // personId -> skill (計算結果で配置されたスタッフ)
-  final Map<String, List<String>>? resultMap; // skill -> [personIds]
-  final bool isCalculated; // 計算済みかどうか
+  final String shiftType;
+  final Map<String, String> wantsMap;
+  final Map<String, int> requiredMap;
+  final Map<String, String> constStaff;
+  final Map<String, String> calculatedStaff;
+  final Map<String, List<String>>? resultMap;
+  final bool isCalculated;
+  final bool isRequiredCustomized; // ← 追加
 
   DailyShift({
     required this.shiftId,
@@ -113,6 +114,7 @@ class DailyShift {
     Map<String, String>? calculatedStaff,
     this.resultMap,
     this.isCalculated = false,
+    this.isRequiredCustomized = false, // ← 追加
   }) : calculatedStaff = calculatedStaff ?? {};
 
   Map<String, dynamic> toJson() => {
@@ -125,6 +127,7 @@ class DailyShift {
         'calculatedStaff': calculatedStaff,
         'resultMap': resultMap,
         'isCalculated': isCalculated,
+        'isRequiredCustomized': isRequiredCustomized, // ← 追加
       };
 
   factory DailyShift.fromJson(Map<String, dynamic> json) {
@@ -145,6 +148,7 @@ class DailyShift {
       calculatedStaff: Map<String, String>.from(json['calculatedStaff'] as Map? ?? {}),
       resultMap: resultMap,
       isCalculated: json['isCalculated'] as bool? ?? false,
+      isRequiredCustomized: json['isRequiredCustomized'] as bool? ?? false, // ← 追加
     );
   }
 
@@ -158,6 +162,7 @@ class DailyShift {
     Map<String, String>? calculatedStaff,
     Map<String, List<String>>? resultMap,
     bool? isCalculated,
+    bool? isRequiredCustomized, // ← 追加
   }) {
     return DailyShift(
       shiftId: shiftId ?? this.shiftId,
@@ -169,6 +174,7 @@ class DailyShift {
       calculatedStaff: calculatedStaff ?? this.calculatedStaff,
       resultMap: resultMap ?? this.resultMap,
       isCalculated: isCalculated ?? this.isCalculated,
+      isRequiredCustomized: isRequiredCustomized ?? this.isRequiredCustomized, // ← 追加
     );
   }
 
@@ -280,39 +286,48 @@ class ShiftData {
     );
   }
 
-  /// 特定の日付のシフトを取得（存在しない場合は作成）
+/// 特定の日付のシフトを取得（存在しない場合は作成）
   DailyShift getDailyShift(String shiftId, DateTime date, String shiftType) {
-    if (dailyShifts.containsKey(shiftId)) {
-      return dailyShifts[shiftId]!;
-    }
+    DailyShift? shift = dailyShifts[shiftId];
     
-    // 存在しない場合は空のシフトを返す
-    // shiftIdからパターンIDを取得してデフォルト値を適用
-    Map<String, int> defaultRequired = {};
-    try {
-      // shiftIdの形式: "2025-11-4-through"
-      final parts = shiftId.split('-');
-      if (parts.length >= 4) {
-        final patternId = parts.sublist(3).join('-');
-        final pattern = shiftPatterns.firstWhere(
-          (p) => p.id == patternId,
-          orElse: () => shiftPatterns.first,
-        );
-        defaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
+    // デフォルト必要人数を取得
+    Map<String, int> getDefaultRequired() {
+      try {
+        final parts = shiftId.split('-');
+        if (parts.length >= 4) {
+          final patternId = parts.sublist(3).join('-');
+          final pattern = shiftPatterns.firstWhere(
+            (p) => p.id == patternId,
+            orElse: () => shiftPatterns.first,
+          );
+          return Map<String, int>.from(pattern.defaultRequiredMap);
+        }
+      } catch (e) {
+        // エラー時は空
       }
-    } catch (e) {
-      // エラーが発生した場合は空のマップを使用
-      defaultRequired = {};
+      return {};
     }
     
-    return DailyShift(
-      shiftId: shiftId,
-      date: date,
-      shiftType: shiftType,
-      wantsMap: {},
-      requiredMap: defaultRequired,
-      constStaff: {},
-      calculatedStaff: {},
-    );
+    if (shift == null) {
+      // シフトが存在しない場合は新規作成（デフォルト値使用）
+      return DailyShift(
+        shiftId: shiftId,
+        date: date,
+        shiftType: shiftType,
+        wantsMap: {},
+        requiredMap: getDefaultRequired(),
+        constStaff: {},
+        calculatedStaff: {},
+        isRequiredCustomized: false, // デフォルト使用
+      );
+    }
+    
+    // 既存のシフトで、カスタマイズされていない場合は最新のデフォルト値を適用
+    if (!shift.isRequiredCustomized) {
+      final defaultRequired = getDefaultRequired();
+      return shift.copyWith(requiredMap: defaultRequired);
+    }
+    
+    return shift;
   }
 }

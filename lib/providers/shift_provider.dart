@@ -280,26 +280,19 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   // ============ 日別シフト（ローカル優先 + 遅延保存） ============
 
   /// 日付ごとのシフトデータを更新（ローカル即時 + 遅延保存）
+  /// 日付ごとのシフトデータを更新（ローカル即時 + 遅延保存）
   void updateDailyShift(DailyShift dailyShift) {
     final newDailyShifts = Map<String, DailyShift>.from(state.dailyShifts);
     
-    // 新規作成の場合、デフォルトの必要人数を適用
-    if (!state.dailyShifts.containsKey(dailyShift.shiftId) && 
-        dailyShift.requiredMap.isEmpty) {
-      try {
-        final parts = dailyShift.shiftId.split('-');
-        if (parts.length >= 4) {
-          final patternId = parts.sublist(3).join('-');
-          final pattern = state.shiftPatterns.firstWhere(
-            (p) => p.id == patternId,
-            orElse: () => state.shiftPatterns.first,
-          );
-          dailyShift = dailyShift.copyWith(
-            requiredMap: Map<String, int>.from(pattern.defaultRequiredMap),
-          );
-        }
-      } catch (e) {
-        // エラーが発生した場合はそのまま保存
+    // 新規作成の場合、requiredMapを空にする（デフォルト値は設定しない）
+    if (!state.dailyShifts.containsKey(dailyShift.shiftId)) {
+      // requiredMapが設定されていない場合は空のまま保存
+      // これにより、getDailyShift()で毎回デフォルト値が適用される
+      if (dailyShift.wantsMap.isEmpty && 
+          dailyShift.constStaff.isEmpty && 
+          dailyShift.calculatedStaff.isEmpty) {
+        // 完全に空の場合は、requiredMapも空にする
+        dailyShift = dailyShift.copyWith(requiredMap: {});
       }
     }
     
@@ -311,32 +304,20 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
   }
 
   /// 特定の日付のシフトを取得または作成
+  /// 特定の日付のシフトを取得または作成
   DailyShift _getOrCreateDailyShift(String shiftId, DateTime date, String shiftType) {
     if (state.dailyShifts.containsKey(shiftId)) {
       return state.dailyShifts[shiftId]!;
     }
     
-    Map<String, int> defaultRequired = {};
-    try {
-      final parts = shiftId.split('-');
-      if (parts.length >= 4) {
-        final patternId = parts.sublist(3).join('-');
-        final pattern = state.shiftPatterns.firstWhere(
-          (p) => p.id == patternId,
-          orElse: () => state.shiftPatterns.first,
-        );
-        defaultRequired = Map<String, int>.from(pattern.defaultRequiredMap);
-      }
-    } catch (e) {
-      defaultRequired = {};
-    }
-    
+    // 新規作成時は requiredMap を空にする
+    // デフォルト値は getDailyShift() で適用される
     return DailyShift(
       shiftId: shiftId,
       date: date,
       shiftType: shiftType,
       wantsMap: {},
-      requiredMap: defaultRequired,
+      requiredMap: {}, // 空にする！
       constStaff: {},
       calculatedStaff: {},
     );
@@ -375,7 +356,7 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
     updateDailyShift(shift.copyWith(wantsMap: newWantsMap));
   }
 
-  /// 特定の日付のシフトの必要人数を設定
+/// 特定の日付のシフトの必要人数を設定
   void setDailyRequired(String shiftId, String skill, int count) {
     final parts = shiftId.split('-');
     final date = DateTime(
@@ -398,7 +379,11 @@ class ShiftDataNotifier extends StateNotifier<ShiftData> {
       newRequiredMap.remove(skill);
     }
     
-    updateDailyShift(shift.copyWith(requiredMap: newRequiredMap));
+    // ユーザーが手動編集したのでカスタマイズフラグをtrueに
+    updateDailyShift(shift.copyWith(
+      requiredMap: newRequiredMap,
+      isRequiredCustomized: true, // ← 追加
+    ));
   }
 
   /// 特定の日付のシフトに固定スタッフを設定

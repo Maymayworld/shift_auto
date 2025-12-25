@@ -17,7 +17,7 @@ class SupabaseDataService {
         .from('skills')
         .select('name')
         .eq('user_id', _userId!)
-        .order('created_at');
+        .order('created_at', ascending: true);
 
     return (response as List).map((e) => e['name'] as String).toList();
   }
@@ -53,7 +53,7 @@ class SupabaseDataService {
         .from('staff')
         .select()
         .eq('user_id', _userId!)
-        .order('created_at');
+        .order('created_at', ascending: true);
 
     return (response as List).map((e) => Person(
       id: e['id'] as String,
@@ -106,7 +106,7 @@ class SupabaseDataService {
         .from('shift_patterns')
         .select()
         .eq('user_id', _userId!)
-        .order('sort_order');
+        .order('sort_order', ascending: true);
 
     if ((response as List).isEmpty) {
       // デフォルトパターンを作成
@@ -189,6 +189,7 @@ class SupabaseDataService {
         calculatedStaff: Map<String, String>.from(e['calculated_staff'] ?? {}),
         resultMap: resultMap,
         isCalculated: e['is_calculated'] as bool? ?? false,
+        isRequiredCustomized: e['is_required_customized'] as bool? ?? false, // ← 追加
       );
     }
 
@@ -210,6 +211,7 @@ class SupabaseDataService {
       'calculated_staff': shift.calculatedStaff,
       'result_map': shift.resultMap,
       'is_calculated': shift.isCalculated,
+      'is_required_customized': shift.isRequiredCustomized, // ← 追加
       'updated_at': DateTime.now().toIso8601String(),
     }, onConflict: 'user_id,shift_id');
   }
@@ -299,6 +301,7 @@ class SupabaseDataService {
       'calculated_staff': shift.calculatedStaff,
       'result_map': shift.resultMap,
       'is_calculated': shift.isCalculated,
+      'is_required_customized': shift.isRequiredCustomized, // ← 追加
       'updated_at': DateTime.now().toIso8601String(),
     }).toList();
 
